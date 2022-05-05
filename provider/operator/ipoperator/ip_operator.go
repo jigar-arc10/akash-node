@@ -126,6 +126,7 @@ func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
 
 	var exitError error
 
+	// TODO - load the same config values the hostname operator uses here
 	pruneTicker := time.NewTicker(2 * time.Minute /*op.cfg.pruneInterval*/)
 	defer pruneTicker.Stop()
 	prepareTicker := time.NewTicker(2 * time.Second /*op.cfg.webRefreshInterval*/)

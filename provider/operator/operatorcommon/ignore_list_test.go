@@ -46,3 +46,27 @@ func TestIgnoreList(t *testing.T) {
 	require.NoError(t, dec.Decode(&output))
 	require.Len(t, output, 100)
 }
+
+func TestIgnoreListFailureLimit(t *testing.T) {
+	failureLimit := uint(testutil.RandRangeInt(3,10))
+	il := NewIgnoreList(IgnoreListConfig{
+		FailureLimit: failureLimit,
+		EntryLimit:   100,
+		AgeLimit:     time.Hour,
+	})
+
+	cnt := testutil.RandRangeInt(101, 1000)
+	for i := 0; i != cnt; i++ {
+		lid := testutil.LeaseID(t)
+		require.False(t, il.IsFlagged(lid))
+
+		for j := uint(0); j != failureLimit ; j++ {
+			il.AddError(lid, io.EOF)
+			if j == failureLimit - 1{
+				require.True(t, il.IsFlagged(lid))
+			} else {
+				require.False(t, il.IsFlagged(lid))
+			}
+		}
+	}
+}

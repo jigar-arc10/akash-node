@@ -41,3 +41,20 @@ func TestOperatorServerReturnsPrepareError(t *testing.T) {
 	flag()
 	require.ErrorIs(t, server.PrepareAll(), io.EOF)
 }
+
+
+
+func TestOperatorServerPanicsOnDuplicatePath(t *testing.T) {
+	server, err := NewOperatorHTTP()
+	require.NoError(t, err)
+	require.NotNil(t, server)
+
+	_ = server.AddPreparedEndpoint("/thepath", func(_ PreparedResult) error {return nil})
+	require.PanicsWithValue(t, "prepared result exists for path: /thepath", func(){
+		_ = server.AddPreparedEndpoint("/thepath", func(_ PreparedResult) error {return nil})
+	})
+
+	require.PanicsWithValue(t, "passed nil value for prepare function", func() {
+		_ = server.AddPreparedEndpoint("/lhjkbhjlkb", nil)
+	})
+}

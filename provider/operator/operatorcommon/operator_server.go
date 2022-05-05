@@ -64,6 +64,9 @@ func (opHttp *operatorHTTP) GetRouter() *mux.Router {
 }
 
 func (opHttp *operatorHTTP) AddPreparedEndpoint(path string, prepare PrepareFn) PrepareFlagFn {
+	if prepare == nil {
+		panic("passed nil value for prepare function")
+	}
 	_, exists := opHttp.results[path]
 	if exists {
 		panic("prepared result exists for path: " + path)
