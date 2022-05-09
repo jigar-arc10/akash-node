@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/rest"
 	"net"
 	"net/http"
+	"strings"
 )
 
 var (
@@ -176,6 +177,12 @@ func (ipoc *ipOperatorClient) GetIPAddressUsage(ctx context.Context) (ipoptypes.
 }
 
 func extractRemoteError(response *http.Response) error {
+	contentType := response.Header["Content-Type"]
+	if len(contentType) == 0 || !strings.Contains(contentType[0], "json") {
+		return fmt.Errorf("%w: http status %d - unspecified error", errIPOperatorRemote, response.StatusCode)
+	}
+
+	// Decode response as JSON error
 	body := ipoptypes.IPOperatorErrorResponse{}
 	decoder := json.NewDecoder(response.Body)
 	err := decoder.Decode(&body)

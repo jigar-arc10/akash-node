@@ -258,7 +258,7 @@ func (op *ipOperator) applyEvent(ctx context.Context, ev v1beta2.IPResourceEvent
 func (op *ipOperator) applyDeleteEvent(parentCtx context.Context, ev v1beta2.IPResourceEvent) error {
 	directive := buildIPDirective(ev)
 
-	// Delete events are a one-shot type thing. The oeprator always queries for existing CRDs but can't
+	// Delete events are a one-shot type thing. The operator always queries for existing CRDs but can't
 	// query for the non-existence of something. The timeout used here is considerably higher as a result
 	// In the future the operator can be improved by adding an optional purge routing which seeks out kube resources
 	// for services that allocate an IP but that do not belong to at least 1 CRD
