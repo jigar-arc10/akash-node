@@ -39,12 +39,14 @@ import (
 )
 
 var (
-	ErrLeaseNotFound             = errors.New("kube: lease not found")
-	ErrNoDeploymentForLease      = errors.New("kube: no deployments for lease")
-	ErrNoManifestForLease        = errors.New("kube: no manifest for lease")
-	ErrNoServiceForLease         = errors.New("no service for that lease")
-	ErrInvalidHostnameConnection = errors.New("kube: invalid hostname connection")
-	errNotConfiguredWithSettings = errors.New("not configured with settings in the context passed to function")
+	ErrKubeClient = errors.New("kube")
+	ErrLeaseNotFound             = fmt.Errorf("%w: lease not found", ErrKubeClient)
+	ErrNoDeploymentForLease      = fmt.Errorf("%w: no deployments for lease", ErrKubeClient)
+	ErrNoManifestForLease        = fmt.Errorf("%w: no manifest for lease", ErrKubeClient)
+	ErrNoServiceForLease         = fmt.Errorf("%w: no service for that lease", ErrKubeClient)
+	ErrInvalidHostnameConnection = fmt.Errorf("%w: invalid hostname connection", ErrKubeClient)
+	errNotConfiguredWithSettings = fmt.Errorf("%w: not configured with settings in the context passed to function", ErrKubeClient)
+	ErrAlreadyExists = fmt.Errorf("%w: resource already exists", ErrKubeClient)
 )
 
 var (

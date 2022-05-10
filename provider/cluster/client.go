@@ -96,7 +96,7 @@ type Client interface {
 	// KubeVersion returns the version information of kubernetes running in the cluster
 	KubeVersion() (*version.Info, error)
 
-	DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string) error
+	DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string, overwrite bool) error
 	PurgeDeclaredIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) error
 	PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
 }
@@ -585,7 +585,7 @@ func (c *nullClient) KubeVersion() (*version.Info, error) {
 	return nil, nil
 }
 
-func (c *nullClient) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string) error {
+func (c *nullClient) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string, overwrite bool) error {
 	return errNotImplemented
 }
 

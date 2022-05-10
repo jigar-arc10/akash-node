@@ -291,7 +291,7 @@ func getStateKey(leaseID mtypes.LeaseID, sharingKey string, externalPort uint32)
 }
 
 func getStateKeyFromEvent(ev v1beta2.IPResourceEvent) string {
-	return getStateKey(ev.GetLeaseID(), ev.GetSharingKey(), ev.GetExternalPort())
+	return ev.GetResourceName()
 }
 
 func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPResourceEvent) error {
@@ -304,6 +304,12 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPRe
 		"service", ev.GetServiceName(),
 		"externalPort", ev.GetExternalPort())
 	entry, exists := op.state[uid]
+
+	isSameLease := true
+	if exists {
+		isSameLease = entry.presentLease.Equals(leaseID)
+	}
+	_ = isSameLease // use me to figure out update or change
 
 	directive := buildIPDirective(ev)
 

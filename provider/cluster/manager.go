@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
+	"github.com/ovrclk/akash/provider/cluster/kube"
 	"io"
 	"regexp"
 	"strings"
@@ -52,7 +53,7 @@ var (
 		Name: "provider_deployment_monitor",
 	}, []string{"action"})
 
-	ErrLeaseInactive = errors.New("Inactive Lease")
+	ErrLeaseInactive = errors.New("inactive Lease")
 )
 
 type deploymentManager struct {
@@ -436,6 +437,8 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		}
 	}
 	purgeIPs := make([]serviceExposeWithServiceName, 0)
+	// TODO - remove dm.currentIPs entirely. Instead just query for what is in use at this time. Reading
+	// resources is basically free and more robust anyways
 	for currentIP := range dm.currentIPs {
 		_, stillInUse := ipsInThisRequest[currentIP]
 		if !stillInUse {
@@ -472,7 +475,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 			}
 			effectiveName = strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(h.Sum(nil)[0:15]))
 		}
-		return fmt.Sprintf("%s-ip-%s", lID.String(), effectiveName)
+		return fmt.Sprintf("%s-ip-%s", lID.GetOwner(), effectiveName)
 	}
 
 	for _, serviceExpose := range leasedIPs {
@@ -482,10 +485,12 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		externalPort := clusterutil.ExposeExternalPort(serviceExpose.expose)
 		port := serviceExpose.expose.Port
 
-		err = dm.client.DeclareIP(ctx, dm.lease, serviceExpose.name, uint32(port), uint32(externalPort), serviceExpose.expose.Proto, sharingKey)
+		err = dm.client.DeclareIP(ctx, dm.lease, serviceExpose.name, uint32(port), uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
+		if err != nil  {
+			if !errors.Is(err, kube.ErrAlreadyExists) {
+				return withheldHostnames, err
+			}
 
-		if err != nil {
-			return withheldHostnames, err
 		}
 		dm.currentIPs[serviceExpose.idIP()] = serviceExpose
 	}

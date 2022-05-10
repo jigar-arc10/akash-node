@@ -1487,19 +1487,36 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
 	)
 	s.Require().NoError(err)
-	s.Require().NoError(s.waitForBlocksCommitted(20))
 
-	cmdResult, err := providerCmd.ProviderStatusExec(s.validator.ClientCtx, leaseID.Provider)
-	require.NoError(s.T(), err)
-	data := make(map[string]interface{})
-	err = json.Unmarshal(cmdResult.Bytes(), &data)
-	require.NoError(s.T(), err)
-	leaseCount, ok := data["cluster"].(map[string]interface{})["leases"]
-	require.True(s.T(), ok)
-	require.Equal(s.T(), float64(1), leaseCount)
+	// Wait for lease to show up
+	maxWait := time.After(2*time.Minute)
+	for {
+
+		select {
+		case <- s.ctx.Done():
+			s.T().Fatal("test context closed before lease is stood up by provider")
+		case <- maxWait:
+			s.T().Fatal("timed out waiting on lease to be stood up by provider")
+		default:
+		}
+		cmdResult, err := providerCmd.ProviderStatusExec(s.validator.ClientCtx, leaseID.Provider)
+		require.NoError(s.T(), err)
+		data := make(map[string]interface{})
+		err = json.Unmarshal(cmdResult.Bytes(), &data)
+		require.NoError(s.T(), err)
+		leaseCount, ok := data["cluster"].(map[string]interface{})["leases"]
+		s.T().Logf("lease count: %v", leaseCount)
+		if ok && leaseCount == float64(1) {
+			break
+		}
+
+		time.Sleep(time.Second)
+	}
+
+	time.Sleep(30 * time.Second) // TODO - replace with polling
 
 	// Get the lease status and confirm IP is present
-	cmdResult, err = providerCmd.ProviderLeaseStatusExec(
+	cmdResult, err := providerCmd.ProviderLeaseStatusExec(
 		s.validator.ClientCtx,
 		fmt.Sprintf("--%s=%v", "dseq", leaseID.DSeq),
 		fmt.Sprintf("--%s=%v", "gseq", leaseID.GSeq),
@@ -1529,6 +1546,7 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 
 func TestIntegrationTestSuite(t *testing.T) {
 	integrationTestOnly(t)
+	/**
 	suite.Run(t, new(E2EContainerToContainer))
 	suite.Run(t, new(E2EAppNodePort))
 	suite.Run(t, new(E2EDeploymentUpdate))
@@ -1537,6 +1555,7 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EPersistentStorageBeta2))
 	suite.Run(t, new(E2EMigrateHostname))
 	suite.Run(t, new(E2EJWTServer))
+	 */
 	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }
 

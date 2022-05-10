@@ -18,37 +18,46 @@ import (
 	"strings"
 )
 
-func ipResourceName(leaseID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) string {
-	ns := builder.LidNS(leaseID)[0:20]
-	resourceName := fmt.Sprintf("%s-%s-%d-%s", ns, serviceName, externalPort, proto)
-	return strings.ToLower(resourceName)
-}
+const (
+	serviceNameLabel = "service-name"
+	externalPortLabel = "external-port"
+	protoLabel = "proto"
+)
 
 func (c *client) PurgeDeclaredIP(ctx context.Context, leaseID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) error {
-	resourceName := ipResourceName(leaseID, serviceName, externalPort, proto)
+	labelSelector := &strings.Builder{}
+	kubeSelectorForLease(labelSelector, leaseID)
+	_, _ = fmt.Fprintf(labelSelector,",%s=%s",serviceNameLabel, serviceName)
+	_, _ = fmt.Fprintf(labelSelector,",%s=%s",protoLabel ,proto.ToString())
+	_, _ = fmt.Fprintf(labelSelector,",%s=%d",externalPortLabel,externalPort)
 	return c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName),
-		FieldSelector: fmt.Sprintf("metadata.name=%s", resourceName),
 	})
 }
 
-func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string) error {
-	resourceName := ipResourceName(lID, serviceName, externalPort, proto)
+func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string, overwrite bool) error {
+	resourceName := strings.ToLower(fmt.Sprintf("%s-%s-%d", sharingKey, proto.ToString(), externalPort))
+
+	foundEntry, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Get(ctx, resourceName, metav1.GetOptions{})
+	exists := false
+	if err != nil {
+		if !kubeErrors.IsNotFound(err){
+			return err
+		}
+		exists = true
+	}
+
+	if exists && !overwrite {
+		return ErrAlreadyExists
+	}
 
 	labels := map[string]string{
 		builder.AkashManagedLabelName: "true",
+		serviceNameLabel: serviceName,
+		externalPortLabel: fmt.Sprintf("%d", externalPort),
+		protoLabel: proto.ToString(),
 	}
 	builder.AppendLeaseLabels(lID, labels)
-	foundEntry, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Get(ctx, resourceName, metav1.GetOptions{})
-
-	exists := true
-	if err != nil {
-		if kubeErrors.IsNotFound(err) {
-			exists = false
-		} else {
-			return err
-		}
-	}
 
 	obj := akashtypes.ProviderLeasedIP{
 		ObjectMeta: metav1.ObjectMeta{
@@ -167,6 +176,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceE
 			providerAddr: providerAddr,
 			sharingKey:   v.Spec.SharingKey,
 			protocol:     proto,
+			resourceName: v.ObjectMeta.Name,
 		}
 		evData[i] = ev
 	}
@@ -259,6 +269,11 @@ type ipResourceEvent struct {
 	providerAddr sdktypes.Address
 	ownerAddr    sdktypes.Address
 	protocol     manifest.ServiceProtocol
+	resourceName string
+}
+
+func (ev ipResourceEvent) GetResourceName() string {
+	return ev.resourceName
 }
 
 func (ev ipResourceEvent) GetLeaseID() mtypes.LeaseID {
