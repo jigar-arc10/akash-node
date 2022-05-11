@@ -7,6 +7,7 @@ import (
 	manifest "github.com/ovrclk/akash/manifest/v2beta1"
 	akashtypes "github.com/ovrclk/akash/pkg/apis/akash.network/v2beta1"
 	"github.com/ovrclk/akash/provider/cluster/kube/builder"
+	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"github.com/ovrclk/akash/provider/cluster/types/v1beta2"
 	ctypes "github.com/ovrclk/akash/provider/cluster/types/v1beta2"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
@@ -48,7 +49,7 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 	}
 
 	if exists && !overwrite {
-		return ErrAlreadyExists
+		return kubeclienterrors.ErrAlreadyExists
 	}
 
 	labels := map[string]string{

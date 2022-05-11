@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"github.com/ovrclk/akash/pkg/apis/akash.network/v2beta1"
+	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"github.com/ovrclk/akash/provider/cluster/operatorclients"
 	ctypes "github.com/ovrclk/akash/provider/cluster/types/v1beta2"
 	"github.com/ovrclk/akash/provider/gateway/utils"
@@ -25,7 +26,6 @@ import (
 
 	qmock "github.com/ovrclk/akash/client/mocks"
 	"github.com/ovrclk/akash/provider"
-	kubeClient "github.com/ovrclk/akash/provider/cluster/kube"
 	pcmock "github.com/ovrclk/akash/provider/cluster/mocks"
 	clustertypes "github.com/ovrclk/akash/provider/cluster/types/v1beta2"
 	pmmock "github.com/ovrclk/akash/provider/manifest/mocks"
@@ -798,7 +798,7 @@ func TestRouteServiceStatusNoDeployment(t *testing.T) {
 			GSeq:     gseq,
 			OSeq:     oseq,
 			Provider: test.paddr.String(),
-		}, serviceName).Return(nil, kubeClient.ErrNoDeploymentForLease)
+		}, serviceName).Return(nil, kubeclienterrors.ErrNoDeploymentForLease)
 
 		lid := types.LeaseID{
 			DSeq:     dseq,

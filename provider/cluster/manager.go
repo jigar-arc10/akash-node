@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
-	"github.com/ovrclk/akash/provider/cluster/kube"
+	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"io"
 	"regexp"
 	"strings"
@@ -487,7 +487,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 
 		err = dm.client.DeclareIP(ctx, dm.lease, serviceExpose.name, uint32(port), uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
 		if err != nil  {
-			if !errors.Is(err, kube.ErrAlreadyExists) {
+			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
 				return withheldHostnames, err
 			}
 

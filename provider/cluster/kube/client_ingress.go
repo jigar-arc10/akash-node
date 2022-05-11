@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/ovrclk/akash/provider/cluster/kube/clientcommon"
+	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"math"
 	"strconv"
 	"strings"
@@ -199,12 +200,12 @@ func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]ctypes
 				return err
 			}
 			if len(ingress.Spec.Rules) != 1 {
-				return fmt.Errorf("%w: invalid number of rules %d", ErrInvalidHostnameConnection, len(ingress.Spec.Rules))
+				return fmt.Errorf("%w: invalid number of rules %d", kubeclienterrors.ErrInvalidHostnameConnection, len(ingress.Spec.Rules))
 			}
 			rule := ingress.Spec.Rules[0]
 
 			if len(rule.IngressRuleValue.HTTP.Paths) != 1 {
-				return fmt.Errorf("%w: invalid number of paths %d", ErrInvalidHostnameConnection, len(rule.IngressRuleValue.HTTP.Paths))
+				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.IngressRuleValue.HTTP.Paths))
 			}
 			rulePath := rule.IngressRuleValue.HTTP.Paths[0]
 			results = append(results, leaseIDHostnameConnection{

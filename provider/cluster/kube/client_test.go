@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"k8s.io/client-go/rest"
 	"testing"
 
@@ -127,7 +128,7 @@ func TestLeaseStatusWithNoDeployments(t *testing.T) {
 		ClusterPublicHostname: "meow.com",
 	})
 	status, err := clientInterface.LeaseStatus(ctx, lid)
-	require.Equal(t, ErrNoDeploymentForLease, err)
+	require.Equal(t, kubeclienterrors.ErrNoDeploymentForLease, err)
 	require.Nil(t, status)
 }
 
@@ -390,7 +391,7 @@ func TestServiceStatusNoLease(t *testing.T) {
 	clientInterface := clientForTest(t, kmock, nil)
 
 	status, err := clientInterface.ServiceStatus(context.Background(), lid, serviceName)
-	require.ErrorIs(t, err, ErrLeaseNotFound)
+	require.ErrorIs(t, err, kubeclienterrors.ErrLeaseNotFound)
 	require.Nil(t, status)
 }
 
@@ -423,7 +424,7 @@ func TestServiceStatusNoDeployment(t *testing.T) {
 	clientInterface := clientForTest(t, kmock, akashMock)
 
 	status, err := clientInterface.ServiceStatus(context.Background(), lid, serviceName)
-	require.ErrorIs(t, err, ErrNoDeploymentForLease)
+	require.ErrorIs(t, err, kubeclienterrors.ErrNoDeploymentForLease)
 	require.Nil(t, status)
 }
 
@@ -463,7 +464,7 @@ func TestServiceStatusNoServiceWithName(t *testing.T) {
 	clientInterface := clientForTest(t, kmock, akashMock)
 
 	status, err := clientInterface.ServiceStatus(context.Background(), lid, serviceName)
-	require.ErrorIs(t, err, ErrNoServiceForLease)
+	require.ErrorIs(t, err, kubeclienterrors.ErrNoServiceForLease)
 	require.Nil(t, status)
 }
 
@@ -504,7 +505,7 @@ func TestServiceStatusNoCRDManifest(t *testing.T) {
 
 	status, err := clientInterface.ServiceStatus(context.Background(), lid, serviceName)
 	require.Error(t, err)
-	require.EqualError(t, err, ErrNoManifestForLease.Error())
+	require.EqualError(t, err, kubeclienterrors.ErrNoManifestForLease.Error())
 	require.Nil(t, status)
 }
 
@@ -659,7 +660,7 @@ func TestServiceStatusWithNoManifest(t *testing.T) {
 	status, err := clientInterface.ServiceStatus(context.Background(), lid, serviceName)
 	require.Error(t, err)
 	require.Nil(t, status)
-	require.EqualError(t, err, ErrNoManifestForLease.Error())
+	require.EqualError(t, err, kubeclienterrors.ErrNoManifestForLease.Error())
 
 }
 

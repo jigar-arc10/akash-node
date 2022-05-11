@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"github.com/ovrclk/akash/provider/cluster/operatorclients"
 	"github.com/ovrclk/akash/provider/gateway/utils"
 	ipoptypes "github.com/ovrclk/akash/provider/operator/ipoperator/types"
@@ -40,7 +41,6 @@ import (
 
 	"github.com/ovrclk/akash/provider"
 	"github.com/ovrclk/akash/provider/cluster"
-	kubeClient "github.com/ovrclk/akash/provider/cluster/kube"
 	cltypes "github.com/ovrclk/akash/provider/cluster/types/v1beta2"
 	pmanifest "github.com/ovrclk/akash/provider/manifest"
 	manifestValidation "github.com/ovrclk/akash/validation"
@@ -675,11 +675,11 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, ipopclient o
 
 		result.Services, err = cclient.LeaseStatus(ctx, leaseID)
 		if err != nil {
-			if errors.Is(err, kubeClient.ErrNoDeploymentForLease) {
+			if errors.Is(err, kubeclienterrors.ErrNoDeploymentForLease) {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
-			if errors.Is(err, kubeClient.ErrLeaseNotFound) {
+			if errors.Is(err, kubeclienterrors.ErrLeaseNotFound) {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
@@ -699,11 +699,11 @@ func leaseServiceStatusHandler(log log.Logger, cclient cluster.ReadClient) http.
 	return func(w http.ResponseWriter, req *http.Request) {
 		status, err := cclient.ServiceStatus(req.Context(), requestLeaseID(req), requestService(req))
 		if err != nil {
-			if errors.Is(err, kubeClient.ErrNoDeploymentForLease) {
+			if errors.Is(err, kubeclienterrors.ErrNoDeploymentForLease) {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
-			if errors.Is(err, kubeClient.ErrLeaseNotFound) {
+			if errors.Is(err, kubeclienterrors.ErrLeaseNotFound) {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}

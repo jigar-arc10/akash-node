@@ -39,17 +39,6 @@ import (
 )
 
 var (
-	ErrKubeClient = errors.New("kube")
-	ErrLeaseNotFound             = fmt.Errorf("%w: lease not found", ErrKubeClient)
-	ErrNoDeploymentForLease      = fmt.Errorf("%w: no deployments for lease", ErrKubeClient)
-	ErrNoManifestForLease        = fmt.Errorf("%w: no manifest for lease", ErrKubeClient)
-	ErrNoServiceForLease         = fmt.Errorf("%w: no service for that lease", ErrKubeClient)
-	ErrInvalidHostnameConnection = fmt.Errorf("%w: invalid hostname connection", ErrKubeClient)
-	errNotConfiguredWithSettings = fmt.Errorf("%w: not configured with settings in the context passed to function", ErrKubeClient)
-	ErrAlreadyExists = fmt.Errorf("%w: resource already exists", ErrKubeClient)
-)
-
-var (
 	kubeCallsCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "provider_kube_calls",
 	}, []string{"action", "result"})
@@ -179,7 +168,7 @@ func (c *client) Deployments(ctx context.Context) ([]ctypes.Deployment, error) {
 func (c *client) Deploy(ctx context.Context, lid mtypes.LeaseID, group *manifest.Group) error {
 	settingsI := ctx.Value(builder.SettingsKey)
 	if nil == settingsI {
-		return errNotConfiguredWithSettings
+		return kubeclienterrors.ErrNotConfiguredWithSettings
 	}
 	settings := settingsI.(builder.Settings)
 	if err := builder.ValidateSettings(settings); err != nil {
@@ -412,7 +401,7 @@ func (c *client) LeaseLogs(ctx context.Context, lid mtypes.LeaseID,
 func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]ctypes.ForwardedPortStatus, error) {
 	settingsI := ctx.Value(builder.SettingsKey)
 	if nil == settingsI {
-		return nil, errNotConfiguredWithSettings
+		return nil, kubeclienterrors.ErrNotConfiguredWithSettings
 	}
 	settings := settingsI.(builder.Settings)
 	if err := builder.ValidateSettings(settings); err != nil {
@@ -480,7 +469,7 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 func (c *client) LeaseStatus(ctx context.Context, lid mtypes.LeaseID) (map[string]*ctypes.ServiceStatus, error) {
 	settingsI := ctx.Value(builder.SettingsKey)
 	if nil == settingsI {
-		return nil, errNotConfiguredWithSettings
+		return nil, kubeclienterrors.ErrNotConfiguredWithSettings
 	}
 	settings := settingsI.(builder.Settings)
 	if err := builder.ValidateSettings(settings); err != nil {
@@ -525,7 +514,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 	mani, err := c.ac.AkashV2beta1().Manifests(c.ns).Get(ctx, builder.LidNS(lid), metav1.GetOptions{})
 	if err != nil {
 		c.log.Error("CRD manifest not found", "lease-ns", builder.LidNS(lid), "name", name)
-		return nil, ErrNoManifestForLease
+		return nil, kubeclienterrors.ErrNoManifestForLease
 	}
 
 	var result *ctypes.ServiceStatus
@@ -560,7 +549,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 		}
 		if deployment == nil {
 			c.log.Error("no deployment found", "name", name)
-			return nil, ErrNoDeploymentForLease
+			return nil, kubeclienterrors.ErrNoDeploymentForLease
 		}
 
 		result = &ctypes.ServiceStatus{
@@ -588,7 +577,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 		}
 		if statefulset == nil {
 			c.log.Error("no statefulsets found", "name", name)
-			return nil, ErrNoDeploymentForLease
+			return nil, kubeclienterrors.ErrNoDeploymentForLease
 		}
 
 		result = &ctypes.ServiceStatus{
@@ -633,7 +622,7 @@ exposeCheckLoop:
 	}
 
 	if !found {
-		return nil, fmt.Errorf("%w: service %q", ErrNoServiceForLease, name)
+		return nil, fmt.Errorf("%w: service %q", kubeclienterrors.ErrNoServiceForLease, name)
 	}
 
 	c.log.Debug("service result", "lease-ns", builder.LidNS(lid), "has-hostnames", hasHostnames)
@@ -678,7 +667,7 @@ func (c *client) leaseExists(ctx context.Context, lid mtypes.LeaseID) error {
 	kubeCallsCounter.WithLabelValues("namespace-get", label).Inc()
 	if err != nil {
 		if kubeErrors.IsNotFound(err) {
-			return ErrLeaseNotFound
+			return kubeclienterrors.ErrLeaseNotFound
 		}
 
 		c.log.Error("namespaces get", "err", err)
@@ -749,7 +738,7 @@ func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (m
 
 	if len(serviceStatus) == 0 {
 		c.log.Info("No deployments found for", "lease namespace", builder.LidNS(lid))
-		return nil, ErrNoDeploymentForLease
+		return nil, kubeclienterrors.ErrNoDeploymentForLease
 	}
 
 	return serviceStatus, nil
