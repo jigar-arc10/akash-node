@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
+	akashtypes "github.com/ovrclk/akash/pkg/apis/akash.network/v2beta1"
 	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"io"
 	"regexp"
@@ -72,7 +73,6 @@ type deploymentManager struct {
 	updatech         chan *manifest.Group
 	teardownch       chan struct{}
 	currentHostnames map[string]struct{}
-	currentIPs       map[string]serviceExposeWithServiceName
 
 	log             log.Logger
 	lc              lifecycle.Lifecycle
@@ -102,7 +102,6 @@ func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *manifest.Gro
 		config:           s.config,
 		serviceShuttingDown: s.lc.ShuttingDown(),
 		currentHostnames: make(map[string]struct{}),
-		currentIPs:       make(map[string]serviceExposeWithServiceName),
 	}
 
 	ctx, _ := TieContextToLifecycle(context.Background(), s.lc)
@@ -359,6 +358,11 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
+	currentIPs, err := dm.client.GetDeclaredIPs(ctx, dm.lease)
+	if err != nil {
+		return nil, err
+	}
+
 	// Either reserve the hostnames, or confirm that they already are held
 	allHostnames := util.AllHostnamesOfManifestGroup(*dm.mgroup)
 	withheldHostnames, err := dm.hostnameService.ReserveHostnames(ctx, allHostnames, dm.lease)
@@ -404,6 +408,20 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 	hosts := make(map[string]manifest.ServiceExpose)
 	leasedIPs := make([]serviceExposeWithServiceName, 0)
 	hostToServiceName := make(map[string]string)
+	makeIPSharingLKey := func(lID mtypes.LeaseID, name string) string {
+		allowedRegex := regexp.MustCompile(`[a-z,0-9,\-]+`)
+		effectiveName := name
+		if !allowedRegex.MatchString(name) {
+			h := sha256.New()
+			_, err = io.WriteString(h, name)
+			if err != nil {
+				panic(err)
+
+			}
+			effectiveName = strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(h.Sum(nil)[0:15]))
+		}
+		return fmt.Sprintf("%s-ip-%s", lID.GetOwner(), effectiveName)
+	}
 	ipsInThisRequest := make(map[string]serviceExposeWithServiceName)
 	// clear this out so it gets repopulated
 	dm.currentHostnames = make(map[string]struct{})
@@ -431,19 +449,17 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 			if expose.Global && len(expose.IP) != 0 {
 				v := serviceExposeWithServiceName{expose: expose, name: service.Name}
 				leasedIPs = append(leasedIPs, v)
-				ipsInThisRequest[v.idIP()] = v
-				dm.log.Debug("added IP declaration", "service", v.name, "port", v.expose.ExternalPort, "endpoint", v.expose.IP)
+				ipsInThisRequest[makeIPSharingLKey(dm.lease, expose.IP)] = v
+
 			}
 		}
 	}
-	purgeIPs := make([]serviceExposeWithServiceName, 0)
-	// TODO - remove dm.currentIPs entirely. Instead just query for what is in use at this time. Reading
-	// resources is basically free and more robust anyways
-	for currentIP := range dm.currentIPs {
-		_, stillInUse := ipsInThisRequest[currentIP]
+	purgeIPs := make([]akashtypes.ProviderLeasedIPSpec, 0)
+	for _, currentIP := range currentIPs {
+		// Check if the IP exists in the compute cluster but not in the presently used set of IPs
+		_, stillInUse := ipsInThisRequest[currentIP.SharingKey]
 		if !stillInUse {
-			v := dm.currentIPs[currentIP]
-			purgeIPs = append(purgeIPs, v)
+			purgeIPs = append(purgeIPs, currentIP)
 		}
 	}
 
@@ -456,6 +472,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		}
 	}
 	// TODO - counter
+	// TODO - move to cleanup task that always runs
 	for _, hostname := range purgeHostnames {
 		err = dm.client.PurgeDeclaredHostname(ctx, dm.lease, hostname)
 		if err != nil {
@@ -463,23 +480,9 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		}
 	}
 
-	makeIPSharingLKey := func(lID mtypes.LeaseID, name string) string {
-		allowedRegex := regexp.MustCompile(`[a-z,0-9,\-]+`)
-		effectiveName := name
-		if !allowedRegex.MatchString(name) {
-			h := sha256.New()
-			_, err = io.WriteString(h, name)
-			if err != nil {
-				panic(err)
-
-			}
-			effectiveName = strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(h.Sum(nil)[0:15]))
-		}
-		return fmt.Sprintf("%s-ip-%s", lID.GetOwner(), effectiveName)
-	}
-
 	for _, serviceExpose := range leasedIPs {
 		endpointName := serviceExpose.expose.IP
+		// TODO - check if any exist with the same endpointName for a different lease. If so skip creating those
 		sharingKey := makeIPSharingLKey(dm.lease, endpointName)
 
 		externalPort := clusterutil.ExposeExternalPort(serviceExpose.expose)
@@ -488,16 +491,23 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		err = dm.client.DeclareIP(ctx, dm.lease, serviceExpose.name, uint32(port), uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
 		if err != nil  {
 			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
+				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
 				return withheldHostnames, err
 			}
-
+			dm.log.Info("IP declaration already exists", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
 		}
-		dm.currentIPs[serviceExpose.idIP()] = serviceExpose
+
+		dm.log.Debug("added IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP)
 	}
 
 	// Remove old IPs not in use
-	for _, serviceExpose := range purgeIPs {
-		err = dm.client.PurgeDeclaredIP(ctx, dm.lease, serviceExpose.name, uint32(serviceExpose.expose.Port), serviceExpose.expose.Proto)
+	// TODO - move to cleanup task that always runs
+	for _, spec := range purgeIPs {
+		proto, err := manifest.ParseServiceProtocol(spec.Protocol)
+		if err != nil {
+			return withheldHostnames, err
+		}
+		err = dm.client.PurgeDeclaredIP(ctx, dm.lease, spec.ServiceName, spec.ExternalPort, proto)
 		if err != nil {
 			return withheldHostnames, err
 		}

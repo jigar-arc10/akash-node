@@ -25,6 +25,26 @@ const (
 	protoLabel = "proto"
 )
 
+func (c *client) GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]akashtypes.ProviderLeasedIPSpec, error) {
+	labelSelector := &strings.Builder{}
+	kubeSelectorForLease(labelSelector, leaseID)
+
+	results, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).List(ctx, metav1.ListOptions{
+		LabelSelector:        labelSelector.String(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	retval := make([]akashtypes.ProviderLeasedIPSpec, 0, len(results.Items))
+	for _, item := range results.Items {
+		retval = append(retval, item.Spec)
+	}
+
+	return retval, nil
+}
+
 func (c *client) PurgeDeclaredIP(ctx context.Context, leaseID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) error {
 	labelSelector := &strings.Builder{}
 	kubeSelectorForLease(labelSelector, leaseID)
@@ -39,13 +59,14 @@ func (c *client) PurgeDeclaredIP(ctx context.Context, leaseID mtypes.LeaseID, se
 func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string, overwrite bool) error {
 	resourceName := strings.ToLower(fmt.Sprintf("%s-%s-%d", sharingKey, proto.ToString(), externalPort))
 
+	c.log.Debug("checking for resource", "resource-name", resourceName)
 	foundEntry, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Get(ctx, resourceName, metav1.GetOptions{})
-	exists := false
+	exists := true
 	if err != nil {
 		if !kubeErrors.IsNotFound(err){
 			return err
 		}
-		exists = true
+		exists = false
 	}
 
 	if exists && !overwrite {

@@ -30,6 +30,8 @@ import (
 	"github.com/ovrclk/akash/types/unit"
 	mquery "github.com/ovrclk/akash/x/market/query"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+
+	akashtypes "github.com/ovrclk/akash/pkg/apis/akash.network/v2beta1"
 )
 
 var (
@@ -61,6 +63,7 @@ type ReadClient interface {
 	GetHostnameDeploymentConnections(ctx context.Context) ([]ctypes.LeaseIDHostnameConnection, error)
 
 	ObserveIPState(ctx context.Context) (<-chan ctypes.IPResourceEvent, error)
+	GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]akashtypes.ProviderLeasedIPSpec, error)
 }
 
 // Client interface lease and deployment methods
@@ -99,6 +102,7 @@ type Client interface {
 	DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string, overwrite bool) error
 	PurgeDeclaredIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) error
 	PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
+
 }
 
 func ErrorIsOkToSendToClient(err error) bool {
@@ -607,4 +611,8 @@ func (c *nullClient) PurgeIPPassthrough(ctx context.Context, lID mtypes.LeaseID,
 
 func (c *nullClient) PurgeDeclaredIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) error {
 	return errNotImplemented
+}
+
+func (c *nullClient) GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]akashtypes.ProviderLeasedIPSpec, error) {
+	return nil, errNotImplemented
 }
