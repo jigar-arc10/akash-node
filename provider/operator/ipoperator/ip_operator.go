@@ -774,7 +774,7 @@ func (b *barrier) enter() bool {
 }
 
 func (b *barrier) exit() {
-	atomic.StoreInt32(&b.active, -1)
+	atomic.AddInt32(&b.active, -1)
 }
 
 func (b *barrier) waitUntilClear(ctx context.Context) error {

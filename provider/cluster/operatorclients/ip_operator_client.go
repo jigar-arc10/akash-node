@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 var (
@@ -64,6 +65,7 @@ func NewIPOperatorClient(logger log.Logger, kubeConfig *rest.Config, endpoint *n
 	return &ipOperatorClient{
 		sda: sda,
 		log: logger.With("operator", "ip"),
+		l: &sync.Mutex{},
 	}, nil
 }
 
@@ -84,6 +86,7 @@ type ipOperatorClient struct {
 	sda    clusterutil.ServiceDiscoveryAgent
 	client clusterutil.ServiceClient
 	log    log.Logger
+	l sync.Locker
 }
 
 var errNotAlive = errors.New("ip operator is not yet alive")
@@ -108,6 +111,8 @@ func (ipoc *ipOperatorClient) Check(ctx context.Context) error {
 }
 
 func (ipoc *ipOperatorClient) newRequest(ctx context.Context, method string, path string, body io.Reader) (*http.Request, error) {
+	ipoc.l.Lock()
+	defer ipoc.l.Unlock()
 	if ipoc.client == nil {
 		var err error
 		ipoc.client, err = ipoc.sda.GetClient(ctx, false, false)
