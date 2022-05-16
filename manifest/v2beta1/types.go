@@ -89,8 +89,8 @@ type ServiceExpose struct {
 	Global                 bool
 	Hosts                  []string
 	HTTPOptions            ServiceExposeHTTPOptions
-	IP                     string
-	EndpointSequenceNumber uint32
+	IP                     string // The name of the IP address associated with this, if any
+	EndpointSequenceNumber uint32 // The sequence number of the associated endpoint in the on-chain data
 }
 
 type ServiceExposeHTTPOptions struct {
