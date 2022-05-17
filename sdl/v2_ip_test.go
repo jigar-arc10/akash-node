@@ -1,6 +1,8 @@
 package sdl
 
 import (
+	"bytes"
+	"fmt"
 	types "github.com/ovrclk/akash/types/v1beta2"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -163,5 +165,94 @@ func TestV2Parse_MultipleGroupsIP(t *testing.T) {
 	require.Len(t, resources, 1)
 	resource = resources[0]
 	require.Equal(t, findFirstIPEndpoint(t, resource.Resources.Endpoints).SequenceNumber, ipEndpointSecondGroup.SequenceNumber)
+
+}
+
+
+func TestV2Parse_IPEndpointNaming(t *testing.T) {
+	makeSDLWithEndpointName := func(name string) []byte {
+		const originalSDL = `---
+version: "2.0"
+
+services:
+  web:
+    image: quay.io/ovrclk/demo-app
+    expose:
+      - port: 80
+        to:
+          - global: true
+            ip: %q
+        accept:
+          - test.localhost         
+
+profiles:
+  compute:
+    web:
+      resources:
+        cpu:
+          units: "0.01"
+        memory:
+          size: "128Mi"
+        storage:
+          size: "512Mi"
+
+  placement:
+    global:
+      pricing:
+        web:
+          denom: uakt
+          amount: 10
+
+deployment:
+  web:
+    global:
+      profile: web
+      count: 1
+
+endpoints:
+  %q:
+    kind: ip
+`
+		buf := &bytes.Buffer{}
+		_, err := fmt.Fprintf(buf, originalSDL, name, name)
+		require.NoError(t, err)
+		return buf.Bytes()
+	}
+
+	_, err := Read(makeSDLWithEndpointName("meow72-memes"))
+	require.NoError(t, err)
+
+	_, err = Read(makeSDLWithEndpointName("meow72-mem_es"))
+	require.NoError(t, err)
+
+	_, err = Read(makeSDLWithEndpointName("!important"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, errSDLInvalid)
+	require.Contains(t, err.Error(), "not a valid name")
+
+	_, err = Read(makeSDLWithEndpointName("foo^bar"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, errSDLInvalid)
+	require.Contains(t, err.Error(), "not a valid name")
+
+	_, err = Read(makeSDLWithEndpointName("ROAR"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, errSDLInvalid)
+	require.Contains(t, err.Error(), "not a valid name")
+
+	_, err = Read(makeSDLWithEndpointName("996"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, errSDLInvalid)
+	require.Contains(t, err.Error(), "not a valid name")
+
+	_, err = Read(makeSDLWithEndpointName("_kittens"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, errSDLInvalid)
+	require.Contains(t, err.Error(), "not a valid name")
+
+	_, err = Read(makeSDLWithEndpointName("-kittens"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, errSDLInvalid)
+	require.Contains(t, err.Error(), "not a valid name")
 
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	providerUtil "github.com/ovrclk/akash/provider/cluster/util"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 
@@ -42,6 +43,8 @@ var (
 	errUnknownNextCase               = errors.New("next case is unknown")
 	errHTTPOptionNotAllowed          = errors.New("http option not allowed")
 	errSDLInvalid                    = errors.New("SDL invalid")
+
+	endpointNameValidationRegex = regexp.MustCompile(`^[[:lower:]]+[[:lower:]-_\d]+$`)
 )
 
 type v2 struct {
@@ -476,6 +479,10 @@ func (sdl *v2) Manifest() (manifest.Manifest, error) {
 
 func (sdl *v2) validate() error {
 	for endpointName, endpoint := range sdl.Endpoints {
+		if !endpointNameValidationRegex.MatchString(endpointName) {
+			return fmt.Errorf("%w: endpoint named %q is not a valid name", errSDLInvalid, endpointName)
+		}
+
 		if len(endpoint.Kind) == 0 {
 			return fmt.Errorf("%w: endpoint named %q has no kind", errSDLInvalid, endpointName)
 		}
