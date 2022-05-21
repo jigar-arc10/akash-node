@@ -562,9 +562,9 @@ loop:
 				close(is.readych)
 			}
 
-			resultArray := res.Value().([]interface{})
+			runResult := res.Value().(runCheckResult)
 
-			state.inventory = resultArray[0].(ctypes.Inventory)
+			state.inventory = runResult.inventoryResult
 			metrics := state.inventory.Metrics()
 
 			is.updateInventoryMetrics(metrics)
@@ -592,13 +592,10 @@ loop:
 
 			if is.ipOperator != nil {
 				// Save IP address data
-				state.ipAddrUsage = resultArray[1].(ipoptypes.IPAddressUsage)
+				state.ipAddrUsage = runResult.ipResult
 
 				// Process confirmed IP addresses usage
-				confirmed := resultArray[2].([]mtypes.OrderID)
-
-				for _, confirmedOrderID := range confirmed {
-
+				for _, confirmedOrderID := range runResult.confirmedResult {
 					for i, entry := range state.reservations {
 						if entry.order.Equals(confirmedOrderID) {
 							state.reservations[i].ipsConfirmed = true
@@ -629,6 +626,12 @@ type confirmationItem struct {
 	expectedQuantity uint
 }
 
+type runCheckResult struct {
+	inventoryResult ctypes.Inventory
+	ipResult ipoptypes.IPAddressUsage
+	confirmedResult []mtypes.OrderID
+}
+
 func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServiceState) <-chan runner.Result {
 	// Look for unconfirmed IPs, these are IPs that have an deployment created
 	// event and are marked allocated. But until the IP address operator has reported
@@ -654,21 +657,22 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 	state = nil // Don't access state past here, it isn't safe
 
 	return runner.Do(func() runner.Result {
-		inventoryResult, err := is.client.Inventory(ctx)
+		retval := runCheckResult{}
+		var err error
+		retval.inventoryResult, err = is.client.Inventory(ctx)
 
 		if err != nil {
 			return runner.NewResult(nil, err)
 		}
 
-		var ipResult ipoptypes.IPAddressUsage
+
 		if is.ipOperator != nil {
-			ipResult, err = is.ipOperator.GetIPAddressUsage(ctx)
+			retval.ipResult, err = is.ipOperator.GetIPAddressUsage(ctx)
 			if err != nil {
 				return runner.NewResult(nil, err)
 			}
 		}
 
-		var confirmed []mtypes.OrderID
 
 		for _, confirmItem := range confirm {
 			status, err := is.ipOperator.GetIPAddressStatus(ctx, confirmItem.orderID)
@@ -681,17 +685,11 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 
 			numConfirmed := uint(len(status))
 			if numConfirmed == confirmItem.expectedQuantity {
-				confirmed = append(confirmed, confirmItem.orderID)
+				retval.confirmedResult = append(retval.confirmedResult, confirmItem.orderID)
 			}
 		}
 
-		result := []interface{}{
-			inventoryResult,
-			ipResult,
-			confirmed,
-		}
-
-		return runner.NewResult(result, nil)
+		return runner.NewResult(retval, nil)
 	})
 }
 
