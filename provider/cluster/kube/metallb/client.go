@@ -35,9 +35,18 @@ const (
 	akashServiceTarget   = "akash.network/service-target"
 	akashMetalLB         = "metal-lb"
 	metalLbAllowSharedIP = "metallb.universe.tf/allow-shared-ip"
+	metalLbPoolAnnotation = "metallb.universe.tf/address-pool"
+
+	metricsPath = "/metrics"
+
+	defaultMetalLBPoolName = "default"
+
+	metricNameAddrInUse = "metallb_allocator_addresses_in_use_total"
+	metricNameAddrTotal = "metallb_allocator_addresses_total"
 )
 
 var (
+	errMetalLB = errors.New("metal lb error")
 	errInvalidLeaseService = fmt.Errorf("%w lease service error", errMetalLB)
 )
 
@@ -59,26 +68,15 @@ type client struct {
 
 	sda    clusterutil.ServiceDiscoveryAgent
 	client clusterutil.ServiceClient
+
+	poolName string
 }
 
 func (c *client) String() string {
 	return fmt.Sprintf("metal LB client %p", c)
 }
 
-const (
-	metricsPath = "/metrics"
-
-	poolName = "default"
-
-	metricNameAddrInUse = "metallb_allocator_addresses_in_use_total"
-	metricNameAddrTotal = "metallb_allocator_addresses_total"
-)
-
-var (
-	errMetalLB = errors.New("metal lb error")
-)
-
-func NewClient(configPath string, logger log.Logger, endpoint *net.SRV) (Client, error) {
+func NewClient(configPath string, logger log.Logger, poolName string, endpoint *net.SRV) (Client, error) {
 	config, err := clientcommon.OpenKubeConfig(configPath, logger)
 	if err != nil {
 		return nil, fmt.Errorf("%w: creating kubernetes client", err)
@@ -96,9 +94,14 @@ func NewClient(configPath string, logger log.Logger, endpoint *net.SRV) (Client,
 		return nil, err
 	}
 
+	if len(poolName) == 0 {
+		poolName = defaultMetalLBPoolName
+	}
+
 	return &client{
 		sda:  sda,
 		kube: kc,
+		poolName: poolName,
 
 		log: logger.With("client", "metallb"),
 	}, nil
@@ -189,7 +192,7 @@ func (c *client) GetIPAddressUsage(ctx context.Context) (uint, uint, error) {
 					continue
 				}
 
-				if labelEntry.GetValue() != poolName {
+				if labelEntry.GetValue() != c.poolName {
 					continue
 				}
 
@@ -356,9 +359,12 @@ func (c *client) CreateIPPassthrough(ctx context.Context, directive ctypes.Clust
 		builder.AkashManagedLabelName:         "true",
 		builder.AkashManifestServiceLabelName: directive.ServiceName,
 	}
-	// TODO - specify metallb.universe.tf/address-pool annotation if configured to do so only that pool is used at any time
 	annotations := map[string]string{
 		metalLbAllowSharedIP: directive.SharingKey,
+	}
+	// Specify pool annotation if we're not using the default
+	if c.poolName != defaultMetalLBPoolName {
+		annotations[metalLbPoolAnnotation] = c.poolName
 	}
 
 	port := corev1.ServicePort{

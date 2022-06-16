@@ -637,6 +637,7 @@ func doIPOperator(cmd *cobra.Command) error {
 	configPath := viper.GetString(provider_flags.FlagKubeConfig)
 	ns := viper.GetString(provider_flags.FlagK8sManifestNS)
 	listenAddr := viper.GetString(provider_flags.FlagListenAddress)
+	poolName := viper.GetString(flagMetalLbPoolName)
 	logger := operatorcommon.OpenLogger().With("operator", "ip")
 
 	kubeConfig, err := clientcommon.OpenKubeConfig(configPath, logger)
@@ -654,7 +655,7 @@ func doIPOperator(cmd *cobra.Command) error {
 		return err
 	}
 
-	mllbc, err := metallb.NewClient(configPath, logger, metalLbEndpoint)
+	mllbc, err := metallb.NewClient(configPath, logger, poolName, metalLbEndpoint)
 	if err != nil {
 		return err
 	}

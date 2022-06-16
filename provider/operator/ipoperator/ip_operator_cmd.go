@@ -4,6 +4,11 @@ import (
 	provider_flags "github.com/ovrclk/akash/provider/cmd/flags"
 	"github.com/ovrclk/akash/provider/operator/operatorcommon"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+const (
+	flagMetalLbPoolName = "metal-lb-pool"
 )
 
 func Cmd() *cobra.Command {
@@ -21,11 +26,16 @@ func Cmd() *cobra.Command {
 	if err := provider_flags.AddServiceEndpointFlag(cmd, serviceProvider); err != nil {
 		return nil
 	}
-
 	if err := provider_flags.AddServiceEndpointFlag(cmd, serviceMetalLb); err != nil {
 		return nil
 	}
 	err := provider_flags.AddKubeConfigPathFlag(cmd)
+	if err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().String(flagMetalLbPoolName, "", "metal LB ip address pool to use")
+	err = viper.BindPFlag(flagMetalLbPoolName, cmd.Flags().Lookup(flagMetalLbPoolName))
 	if err != nil {
 		panic(err)
 	}
