@@ -13,7 +13,6 @@ type IPResourceEvent interface {
 	GetSharingKey() string
 	GetProtocol() manifest.ServiceProtocol
 	GetEventType() ProviderResourceEvent
-	GetResourceName() string
 }
 
 type IPPassthrough interface {

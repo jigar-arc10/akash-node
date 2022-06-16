@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
-	akashtypes "github.com/ovrclk/akash/pkg/apis/akash.network/v2beta1"
 	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
 	"io"
 	"regexp"
@@ -340,9 +339,9 @@ func (sewsn serviceExposeWithServiceName) idIP() string {
 }
 
 func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
+	cleanupHelper := newDeployCleanupHelper(dm.lease, dm.client, dm.log)
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Weird hack to tie this context to the lifecycle of the parent service, so this doesn't
 	// block forever or anything like that
@@ -352,6 +351,11 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 			cancel()
 		case <-ctx.Done():
 		}
+	}()
+
+	defer func() {
+		cleanupHelper.purgeAll(ctx)
+		cancel()
 	}()
 
 	if err = dm.checkLeaseActive(ctx); err != nil {
@@ -382,11 +386,10 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 	}
 
 	// Figure out what hostnames were removed from the manifest if any
-	purgeHostnames := make([]string, 0)
 	for hostnameInUse := range dm.currentHostnames {
 		_, stillInUse := hostnamesInThisRequest[hostnameInUse]
 		if !stillInUse {
-			purgeHostnames = append(purgeHostnames, hostnameInUse)
+			cleanupHelper.addHostname(hostnameInUse)
 		}
 	}
 
@@ -454,12 +457,16 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 			}
 		}
 	}
-	purgeIPs := make([]akashtypes.ProviderLeasedIPSpec, 0)
+
 	for _, currentIP := range currentIPs {
 		// Check if the IP exists in the compute cluster but not in the presently used set of IPs
 		_, stillInUse := ipsInThisRequest[currentIP.SharingKey]
 		if !stillInUse {
-			purgeIPs = append(purgeIPs, currentIP)
+			proto, err := manifest.ParseServiceProtocol(currentIP.Protocol)
+			if err != nil {
+				return withheldHostnames, err
+			}
+			cleanupHelper.addIP(currentIP.ServiceName, currentIP.ExternalPort, proto)
 		}
 	}
 
@@ -468,14 +475,6 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		err = dm.client.DeclareHostname(ctx, dm.lease, host, hostToServiceName[host], externalPort)
 		if err != nil {
 			// TODO - counter
-			return withheldHostnames, err
-		}
-	}
-	// TODO - counter
-	// TODO - move to cleanup task that always runs
-	for _, hostname := range purgeHostnames {
-		err = dm.client.PurgeDeclaredHostname(ctx, dm.lease, hostname)
-		if err != nil {
 			return withheldHostnames, err
 		}
 	}
@@ -498,19 +497,6 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		}
 
 		dm.log.Debug("added IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP)
-	}
-
-	// Remove old IPs not in use
-	// TODO - move to cleanup task that always runs
-	for _, spec := range purgeIPs {
-		proto, err := manifest.ParseServiceProtocol(spec.Protocol)
-		if err != nil {
-			return withheldHostnames, err
-		}
-		err = dm.client.PurgeDeclaredIP(ctx, dm.lease, spec.ServiceName, spec.ExternalPort, proto)
-		if err != nil {
-			return withheldHostnames, err
-		}
 	}
 
 	return withheldHostnames, nil

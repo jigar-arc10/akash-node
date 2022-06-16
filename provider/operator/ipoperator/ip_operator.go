@@ -27,7 +27,6 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	ipoptypes "github.com/ovrclk/akash/provider/operator/ipoperator/types"
@@ -43,18 +42,9 @@ var (
 	errIPOperator = errors.New("ip operator failure")
 )
 
-type mnagedIP struct {
-	presentLease        mtypes.LeaseID
-	presentServiceName  string
-	lastEvent           v1beta2.IPResourceEvent
-	presentSharingKey   string
-	presentExternalPort uint32
-	presentPort         uint32
-	lastChangedAt       time.Time
-}
 
 type ipOperator struct {
-	state             map[string]mnagedIP
+	state             map[string]managedIP
 	client            cluster.Client
 	log               log.Logger
 	server            operatorcommon.OperatorHTTP
@@ -63,6 +53,7 @@ type ipOperator struct {
 	flagIgnoredLeases operatorcommon.PrepareFlagFn
 	flagUsage         operatorcommon.PrepareFlagFn
 	providerAddr      string
+	cfg operatorcommon.OperatorConfig
 
 	available uint
 	inUse     uint
@@ -86,7 +77,7 @@ func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
 	}
 	op.log.Info("associated provider ", "addr", op.providerAddr)
 
-	op.state = make(map[string]mnagedIP)
+	op.state = make(map[string]managedIP)
 	op.log.Info("fetching existing IP passthroughs")
 	entries, err := op.mllbc.GetIPPassthroughs(parentCtx)
 	if err != nil {
@@ -95,7 +86,7 @@ func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
 	startupTime := time.Now()
 	for _, ipPassThrough := range entries {
 		k := getStateKey(ipPassThrough.GetLeaseID(), ipPassThrough.GetSharingKey(), ipPassThrough.GetExternalPort())
-		op.state[k] = mnagedIP{
+		op.state[k] = managedIP{
 			presentLease:        ipPassThrough.GetLeaseID(),
 			presentServiceName:  ipPassThrough.GetServiceName(),
 			lastEvent:           nil,
@@ -126,10 +117,9 @@ func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
 
 	var exitError error
 
-	// TODO - load the same config values the hostname operator uses here
-	pruneTicker := time.NewTicker(2 * time.Minute /*op.cfg.pruneInterval*/)
+	pruneTicker := time.NewTicker(op.cfg.PruneInterval)
 	defer pruneTicker.Stop()
-	prepareTicker := time.NewTicker(2 * time.Second /*op.cfg.webRefreshInterval*/)
+	prepareTicker := time.NewTicker(op.cfg.WebRefreshInterval)
 	defer prepareTicker.Stop()
 
 	op.log.Info("barrier can now be passed")
@@ -264,10 +254,10 @@ func (op *ipOperator) applyDeleteEvent(parentCtx context.Context, ev v1beta2.IPR
 	// for services that allocate an IP but that do not belong to at least 1 CRD
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*5)
 	defer cancel()
-	err := op.mllbc.PurgeIPPassthrough(ctx, ev.GetLeaseID(), directive)
+	err := op.mllbc.PurgeIPPassthrough(ctx, directive)
 
 	if err == nil {
-		uid := getStateKeyFromEvent(ev)
+		uid := getStateKey(ev.GetLeaseID(), ev.GetSharingKey(), ev.GetExternalPort())
 		delete(op.state, uid)
 		op.flagState()
 	}
@@ -287,17 +277,15 @@ func buildIPDirective(ev v1beta2.IPResourceEvent) ctypes.ClusterIPPassthroughDir
 }
 
 func getStateKey(leaseID mtypes.LeaseID, sharingKey string, externalPort uint32) string {
-	return fmt.Sprintf("%v-%s-%d", leaseID, sharingKey, externalPort)
-}
-
-func getStateKeyFromEvent(ev v1beta2.IPResourceEvent) string {
-	return ev.GetResourceName()
+	// TODO - need to double check this makes sense
+	return fmt.Sprintf("%v-%s-%d", leaseID.GetOwner(), sharingKey, externalPort)
 }
 
 func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPResourceEvent) error {
 	leaseID := ev.GetLeaseID()
 
-	uid := getStateKeyFromEvent(ev)
+
+	uid := getStateKey(ev.GetLeaseID(), ev.GetSharingKey(), ev.GetExternalPort())
 
 	op.log.Info("connecting",
 		"lease", leaseID,
@@ -309,31 +297,50 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPRe
 	if exists {
 		isSameLease = entry.presentLease.Equals(leaseID)
 	}
-	_ = isSameLease // use me to figure out update or change
 
 	directive := buildIPDirective(ev)
 
 	var err error
 	shouldConnect := false
 
-	if !exists {
-		shouldConnect = true
-		op.log.Debug("ip passthrough is new, applying", "lease", leaseID)
-		// Check to see if port or service name is different
-	} else {
-		hasChanged := entry.presentServiceName != ev.GetServiceName() ||
-			entry.presentPort != ev.GetPort() ||
-			entry.presentSharingKey != ev.GetSharingKey() ||
-			entry.presentExternalPort != ev.GetExternalPort()
-		if hasChanged {
+	if isSameLease {
+		if !exists {
 			shouldConnect = true
-			op.log.Debug("ip passthrough has changed, applying", "lease", leaseID)
+			op.log.Debug("ip passthrough is new, applying", "lease", leaseID)
+			// Check to see if port or service name is different
+		} else {
+			hasChanged := entry.presentServiceName != ev.GetServiceName() ||
+				entry.presentPort != ev.GetPort() ||
+				entry.presentSharingKey != ev.GetSharingKey() ||
+				entry.presentExternalPort != ev.GetExternalPort() ||
+				entry.presentProtocol != ev.GetProtocol()
+			if hasChanged {
+				shouldConnect = true
+				op.log.Debug("ip passthrough has changed, applying", "lease", leaseID)
+			}
 		}
-	}
 
-	if shouldConnect {
-		op.log.Debug("Updating ip passthrough", "lease", leaseID)
-		err = op.mllbc.CreateIPPassthrough(ctx, leaseID, directive)
+		if shouldConnect {
+			op.log.Debug("Updating ip passthrough", "lease", leaseID)
+			err = op.mllbc.CreateIPPassthrough(ctx, directive)
+		}
+	} else {
+		deleteDirective := ctypes.ClusterIPPassthroughDirective{
+			LeaseID:      entry.presentLease,
+			ServiceName:  entry.presentServiceName,
+			Port:         entry.presentPort,
+			ExternalPort: entry.presentExternalPort,
+			SharingKey:   entry.presentSharingKey,
+			Protocol:     entry.presentProtocol,
+		}
+		// Delete the entry & recreate it with the new lease associated  to it
+		err = op.mllbc.PurgeIPPassthrough(ctx, deleteDirective)
+		if err != nil {
+			return err
+		}
+		// Remove the current value from the state
+		delete(op.state, uid)
+		err = op.mllbc.CreateIPPassthrough(ctx, directive)
 	}
 
 	if err != nil {
@@ -347,6 +354,7 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPRe
 	entry.presentExternalPort = ev.GetExternalPort()
 	entry.presentSharingKey = ev.GetSharingKey()
 	entry.presentPort = ev.GetPort()
+	entry.presentProtocol = ev.GetProtocol()
 	entry.lastChangedAt = time.Now()
 	op.state[uid] = entry
 	op.flagState()
@@ -505,13 +513,13 @@ func (op *ipOperator) getProviderWalletAddress(parentCtx context.Context) (strin
 	return providerAddr, nil
 }
 
-func newIPOperator(logger log.Logger, client cluster.Client, ilc operatorcommon.IgnoreListConfig, mllbc metallb.Client, providerSda clusterutil.ServiceDiscoveryAgent) (*ipOperator, error) {
+func newIPOperator(logger log.Logger, client cluster.Client, cfg operatorcommon.OperatorConfig, ilc operatorcommon.IgnoreListConfig, mllbc metallb.Client, providerSda clusterutil.ServiceDiscoveryAgent) (*ipOperator, error) {
 	opHTTP, err := operatorcommon.NewOperatorHTTP()
 	if err != nil {
 		return nil, err
 	}
 	retval := &ipOperator{
-		state:         make(map[string]mnagedIP),
+		state:         make(map[string]managedIP),
 		client:        client,
 		log:           logger,
 		server:        opHTTP,
@@ -520,6 +528,7 @@ func newIPOperator(logger log.Logger, client cluster.Client, ilc operatorcommon.
 		dataLock:      &sync.Mutex{},
 		providerSda:   providerSda,
 		barrier:       &barrier{},
+		cfg: cfg,
 	}
 
 	retval.server.GetRouter().Use(func(next http.Handler) http.Handler {
@@ -625,13 +634,11 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 }
 
 func doIPOperator(cmd *cobra.Command) error {
+	configPath := viper.GetString(provider_flags.FlagKubeConfig)
 	ns := viper.GetString(provider_flags.FlagK8sManifestNS)
 	listenAddr := viper.GetString(provider_flags.FlagListenAddress)
 	logger := operatorcommon.OpenLogger().With("operator", "ip")
 
-	// Config path not provided because the authorization comes from the role assigned to the deployment
-	// and provided by kubernetes
-	configPath := "" // TODO - make me an flag or whatever 'provider run' does by default
 	kubeConfig, err := clientcommon.OpenKubeConfig(configPath, logger)
 	if err != nil {
 		return err
@@ -664,7 +671,7 @@ func doIPOperator(cmd *cobra.Command) error {
 	logger.Info("clients", "kube", client, "metallb", mllbc)
 	logger.Info("HTTP listening", "address", listenAddr)
 
-	op, err := newIPOperator(logger, client, operatorcommon.IgnoreListConfigFromViper(), mllbc, providerSda)
+	op, err := newIPOperator(logger, client, operatorcommon.GetOperatorConfigFromViper(), operatorcommon.IgnoreListConfigFromViper(), mllbc, providerSda)
 	if err != nil {
 		return err
 	}
@@ -695,32 +702,8 @@ func doIPOperator(cmd *cobra.Command) error {
 	return nil
 }
 
-func Cmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:          "ip-operator",
-		Short:        "kubernetes operator interfacing with Metal LB",
-		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return doIPOperator(cmd)
-		},
-	}
-	operatorcommon.AddOperatorFlags(cmd, "0.0.0.0:8086")
-	operatorcommon.AddIgnoreListFlags(cmd)
-
-	if err := provider_flags.AddServiceEndpointFlag(cmd, serviceProvider); err != nil {
-		return nil
-	}
-
-	if err := provider_flags.AddServiceEndpointFlag(cmd, serviceMetalLb); err != nil {
-		return nil
-	}
-
-	return cmd
-}
-
 func (op *ipOperator) run(parentCtx context.Context) error {
-	op.log.Debug("ip operator start")
-	const threshold = 500 * time.Millisecond
+	op.log.Info("ip operator start")
 	for {
 		lastAttempt := time.Now()
 		err := op.monitorUntilError(parentCtx)
@@ -733,13 +716,12 @@ func (op *ipOperator) run(parentCtx context.Context) error {
 
 		// don't spin if there is a condition causing fast failure
 		elapsed := time.Since(lastAttempt)
-		if elapsed < threshold {
+		if elapsed < op.cfg.RetryDelay {
 			op.log.Info("delaying")
 			select {
 			case <-parentCtx.Done():
-				break
-
-			case <-time.After(threshold):
+				return parentCtx.Err()
+			case <-time.After(op.cfg.RetryDelay):
 				// delay complete
 			}
 		}
@@ -748,48 +730,4 @@ func (op *ipOperator) run(parentCtx context.Context) error {
 	op.providerSda.Stop()
 	op.mllbc.Stop()
 	return parentCtx.Err()
-}
-
-type barrier struct {
-	enabled int32
-	active  int32
-}
-
-func (b *barrier) enable() {
-	atomic.StoreInt32(&b.enabled, 1)
-}
-
-func (b *barrier) disable() {
-	atomic.StoreInt32(&b.enabled, 0)
-}
-
-func (b *barrier) enter() bool {
-	isEnabled := atomic.LoadInt32(&b.enabled) == 1
-	if !isEnabled {
-		return false
-	}
-
-	atomic.AddInt32(&b.active, 1)
-	return true
-}
-
-func (b *barrier) exit() {
-	atomic.AddInt32(&b.active, -1)
-}
-
-func (b *barrier) waitUntilClear(ctx context.Context) error {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			clear := 0 == atomic.LoadInt32(&b.active)
-			if clear {
-				return nil
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
 }

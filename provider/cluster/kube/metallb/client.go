@@ -45,8 +45,8 @@ type Client interface {
 	GetIPAddressUsage(ctx context.Context) (uint, uint, error)
 	GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.LeaseID) ([]v1beta2.IPLeaseState, error)
 
-	CreateIPPassthrough(ctx context.Context, lID mtypes.LeaseID, directive ctypes.ClusterIPPassthroughDirective) error
-	PurgeIPPassthrough(ctx context.Context, lID mtypes.LeaseID, directive ctypes.ClusterIPPassthroughDirective) error
+	CreateIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error
+	PurgeIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error
 	GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough, error)
 
 	Stop()
@@ -279,20 +279,12 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 			}
 			port := service.Spec.Ports[0]
 
-			// TODO - make this some sort of utility method
-			var proto manifest.ServiceProtocol
-			switch port.Protocol {
-
-			case corev1.ProtocolTCP:
-				proto = manifest.TCP
-			case corev1.ProtocolUDP:
-				proto = manifest.UDP
-			default:
-				return fmt.Errorf("%w: service %q has invalid protocol %v", errInvalidLeaseService, service.ObjectMeta.Name, len(port.Protocol))
+			proto, err := manifest.ServiceProtocolFromKube(port.Protocol)
+			if err != nil {
+				return fmt.Errorf("%w: service %q has invalid protocol %v", errInvalidLeaseService, service.ObjectMeta.Name, err)
 			}
 
 			selectedServiceName := service.Spec.Selector[builder.AkashManifestServiceLabelName]
-
 			// Note: don't care about node port here, even if it is assigned
 			// Note: service.Name is a procedurally generated thing that doesn't mean anything to the end user
 			result = append(result, ipLeaseState{
@@ -314,12 +306,10 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 	return result, nil
 }
 
-func (c *client) PurgeIPPassthrough(ctx context.Context, leaseID mtypes.LeaseID, directive ctypes.ClusterIPPassthroughDirective) error {
-	ns := builder.LidNS(leaseID)
-	portName := createIPPassthroughResourceName(directive)
-
-	err := c.kube.CoreV1().Services(ns).Delete(ctx, portName, metav1.DeleteOptions{})
-
+func (c *client) PurgeIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error {
+	ns := builder.LidNS(directive.LeaseID)
+	resourceName := createIPPassthroughResourceName(directive)
+	err := c.kube.CoreV1().Services(ns).Delete(ctx, resourceName, metav1.DeleteOptions{})
 	if err != nil && kubeErrors.IsNotFound(err) {
 		return nil
 	}
@@ -331,7 +321,7 @@ func createIPPassthroughResourceName(directive ctypes.ClusterIPPassthroughDirect
 	return strings.ToLower(fmt.Sprintf("%s-ip-%d-%v", directive.ServiceName, directive.ExternalPort, directive.Protocol))
 }
 
-func (c *client) CreateIPPassthrough(ctx context.Context, leaseID mtypes.LeaseID, directive ctypes.ClusterIPPassthroughDirective) error {
+func (c *client) CreateIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error {
 	var proto corev1.Protocol
 
 	switch directive.Protocol {
@@ -343,7 +333,7 @@ func (c *client) CreateIPPassthrough(ctx context.Context, leaseID mtypes.LeaseID
 		return fmt.Errorf("%w unknown protocol %v", kubeclienterrors.ErrInternalError, directive.Protocol)
 	}
 
-	ns := builder.LidNS(leaseID)
+	ns := builder.LidNS(directive.LeaseID)
 	portName := createIPPassthroughResourceName(directive)
 
 	foundEntry, err := c.kube.CoreV1().Services(ns).Get(ctx, portName, metav1.GetOptions{})
@@ -358,7 +348,7 @@ func (c *client) CreateIPPassthrough(ctx context.Context, leaseID mtypes.LeaseID
 	}
 
 	labels := make(map[string]string)
-	builder.AppendLeaseLabels(leaseID, labels)
+	builder.AppendLeaseLabels(directive.LeaseID, labels)
 	labels[builder.AkashManagedLabelName] = "true"
 	labels[akashServiceTarget] = akashMetalLB
 
@@ -463,8 +453,7 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough
 				return fmt.Errorf("%w: service %q has invalid leease labels %v", err, service.ObjectMeta.Name, service.Labels)
 			}
 
-			// TODO - use a utlity method here rather than a cast
-			mproto, err := manifest.ParseServiceProtocol(string(proto))
+			mproto, err := manifest.ServiceProtocolFromKube(proto)
 			if err != nil {
 				return fmt.Errorf("%w: service %q has invalid protocol %v", err, service.ObjectMeta.Name, proto)
 			}

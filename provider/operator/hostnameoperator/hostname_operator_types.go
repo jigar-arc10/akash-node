@@ -15,8 +15,3 @@ type managedHostname struct {
 	lastChangeAt        time.Time
 }
 
-type hostnameOperatorConfig struct {
-	pruneInterval      time.Duration
-	webRefreshInterval time.Duration
-	retryDelay         time.Duration
-}

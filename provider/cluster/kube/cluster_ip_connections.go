@@ -48,9 +48,9 @@ func (c *client) GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]
 func (c *client) PurgeDeclaredIP(ctx context.Context, leaseID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) error {
 	labelSelector := &strings.Builder{}
 	kubeSelectorForLease(labelSelector, leaseID)
-	_, _ = fmt.Fprintf(labelSelector,",%s=%s",serviceNameLabel, serviceName)
-	_, _ = fmt.Fprintf(labelSelector,",%s=%s",protoLabel ,proto.ToString())
-	_, _ = fmt.Fprintf(labelSelector,",%s=%d",externalPortLabel,externalPort)
+	_, _ = fmt.Fprintf(labelSelector,",%s=%s", serviceNameLabel, serviceName)
+	_, _ = fmt.Fprintf(labelSelector,",%s=%s", protoLabel, proto.ToString())
+	_, _ = fmt.Fprintf(labelSelector,",%s=%d", externalPortLabel, externalPort)
 	return c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName),
 	})
@@ -198,7 +198,6 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceE
 			providerAddr: providerAddr,
 			sharingKey:   v.Spec.SharingKey,
 			protocol:     proto,
-			resourceName: v.ObjectMeta.Name,
 		}
 		evData[i] = ev
 	}
@@ -291,11 +290,6 @@ type ipResourceEvent struct {
 	providerAddr sdktypes.Address
 	ownerAddr    sdktypes.Address
 	protocol     manifest.ServiceProtocol
-	resourceName string
-}
-
-func (ev ipResourceEvent) GetResourceName() string {
-	return ev.resourceName
 }
 
 func (ev ipResourceEvent) GetLeaseID() mtypes.LeaseID {

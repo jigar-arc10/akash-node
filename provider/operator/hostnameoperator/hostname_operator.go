@@ -40,7 +40,7 @@ type hostnameOperator struct {
 
 	log log.Logger
 
-	cfg    hostnameOperatorConfig
+	cfg    operatorcommon.OperatorConfig
 	server operatorcommon.OperatorHTTP
 
 	flagHostnamesData  operatorcommon.PrepareFlagFn
@@ -62,12 +62,12 @@ func (op *hostnameOperator) run(parentCtx context.Context) error {
 
 		// don't spin if there is a condition causing fast failure
 		elapsed := time.Since(lastAttempt)
-		if elapsed < op.cfg.retryDelay {
+		if elapsed < op.cfg.RetryDelay {
 			op.log.Info("delaying")
 			select {
 			case <-parentCtx.Done():
 				return parentCtx.Err()
-			case <-time.After(op.cfg.retryDelay):
+			case <-time.After(op.cfg.RetryDelay):
 				// delay complete
 			}
 		}
@@ -75,12 +75,6 @@ func (op *hostnameOperator) run(parentCtx context.Context) error {
 }
 
 func (op *hostnameOperator) monitorUntilError(parentCtx context.Context) error {
-	/*
-		Note - the only possible enhancement here would be to enumerate all
-		Ingress objects in the kube cluster not managed by Akash & then
-		avoid trying to create Ingress objects with those names. This isn't really
-		needed at this time.
-	*/
 	op.hostnames = make(map[string]managedHostname)
 	ctx, cancel := context.WithCancel(parentCtx)
 	op.log.Info("starting observation")
@@ -116,9 +110,9 @@ func (op *hostnameOperator) monitorUntilError(parentCtx context.Context) error {
 		return err
 	}
 
-	pruneTicker := time.NewTicker(op.cfg.pruneInterval)
+	pruneTicker := time.NewTicker(op.cfg.PruneInterval)
 	defer pruneTicker.Stop()
-	prepareTicker := time.NewTicker(op.cfg.webRefreshInterval)
+	prepareTicker := time.NewTicker(op.cfg.WebRefreshInterval)
 	defer prepareTicker.Stop()
 
 	var exitError error
@@ -399,8 +393,9 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev ctypes
 		op.log.Debug("Swapping ingress to new deployment")
 		//  Delete the ingress in one namespace and recreate it in the correct one
 		err = op.client.RemoveHostnameFromDeployment(ctx, ev.GetHostname(), entry.presentLease, false)
-		// TODO - remove entry
 		if err == nil {
+			// Remove the current entry, if the next action succeeds then it gets inserted below
+			delete(op.hostnames, ev.GetHostname())
 			err = op.client.ConnectHostnameToDeployment(ctx, directive)
 		}
 	}
@@ -418,7 +413,7 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev ctypes
 	return err
 }
 
-func newHostnameOperator(logger log.Logger, client cluster.Client, config hostnameOperatorConfig, ilc operatorcommon.IgnoreListConfig) (*hostnameOperator, error) {
+func newHostnameOperator(logger log.Logger, client cluster.Client, config operatorcommon.OperatorConfig, ilc operatorcommon.IgnoreListConfig) (*hostnameOperator, error) {
 	opHTTP, err := operatorcommon.NewOperatorHTTP()
 	if err != nil {
 		return nil, err
@@ -439,21 +434,16 @@ func newHostnameOperator(logger log.Logger, client cluster.Client, config hostna
 }
 
 func doHostnameOperator(cmd *cobra.Command) error {
+	configPath := viper.GetString(provider_flags.FlagKubeConfig)
 	ns := viper.GetString(provider_flags.FlagK8sManifestNS)
 
 	listenAddr := viper.GetString(provider_flags.FlagListenAddress)
-	config := hostnameOperatorConfig{
-		pruneInterval:      viper.GetDuration(provider_flags.FlagPruneInterval),
-		webRefreshInterval: viper.GetDuration(provider_flags.FlagWebRefreshInterval),
-		retryDelay:         viper.GetDuration(provider_flags.FlagRetryDelay),
-	}
+	config := operatorcommon.GetOperatorConfigFromViper()
 
 	logger := operatorcommon.OpenLogger().With("op", "hostname")
 	logger.Info("HTTP listening", "address", listenAddr)
 
-	// Config path not provided because the authorization comes from the role assigned to the deployment
-	// and provided by kubernetes
-	client, err := clusterClient.NewClient(logger, ns, "")
+	client, err := clusterClient.NewClient(logger, ns, configPath)
 	if err != nil {
 		return err
 	}
@@ -501,6 +491,10 @@ func Cmd() *cobra.Command {
 	}
 	operatorcommon.AddOperatorFlags(cmd, "0.0.0.0:8085")
 	operatorcommon.AddIgnoreListFlags(cmd)
+	err := provider_flags.AddKubeConfigPathFlag(cmd)
+	if err != nil {
+		panic(err)
+	}
 
 	return cmd
 }

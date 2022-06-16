@@ -1,7 +1,10 @@
 package v2beta1
 
 import (
+	"errors"
+	"fmt"
 	types "github.com/ovrclk/akash/types/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Manifest store list of groups
@@ -14,8 +17,34 @@ const (
 	UDP = ServiceProtocol("UDP")
 )
 
+var (
+	errUnknownServiceProtocol = errors.New("unknown service protocol")
+)
+
 func (sp ServiceProtocol) ToString() string {
 	return string(sp)
+}
+
+func (sp ServiceProtocol) ToKube() (corev1.Protocol, error) {
+	switch(sp){
+	case TCP:
+		return corev1.ProtocolTCP, nil
+	case UDP:
+		return corev1.ProtocolUDP, nil
+	}
+
+	return corev1.Protocol(""), fmt.Errorf("%w: %v", errUnknownServiceProtocol, sp)
+}
+
+func ServiceProtocolFromKube(proto corev1.Protocol) (ServiceProtocol, error){
+	switch(proto) {
+	case corev1.ProtocolTCP:
+		return TCP, nil
+	case corev1.ProtocolUDP:
+		return UDP, nil
+	}
+
+	return ServiceProtocol(""), fmt.Errorf("%w: %v", errUnknownServiceProtocol, proto)
 }
 
 // GetGroups returns a manifest with groups list

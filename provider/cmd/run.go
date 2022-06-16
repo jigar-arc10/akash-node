@@ -85,7 +85,6 @@ const (
 	FlagOvercommitPercentStorage         = "overcommit-pct-storage"
 	FlagDeploymentBlockedHostnames       = "deployment-blocked-hostnames"
 	FlagAuthPem                          = "auth-pem"
-	FlagKubeConfig                       = "kubeconfig"
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
 	FlagBidTimeout                       = "bid-timeout"
 	FlagManifestTimeout                  = "manifest-timeout"
@@ -268,8 +267,7 @@ func RunCmd() *cobra.Command {
 
 	cmd.Flags().String(FlagAuthPem, "", "")
 
-	cmd.Flags().String(FlagKubeConfig, "", "kubernetes configuration file path")
-	if err := viper.BindPFlag(FlagKubeConfig, cmd.Flags().Lookup(FlagKubeConfig)); err != nil {
+	if err := provider_flags.AddKubeConfigPathFlag(cmd); err != nil {
 		return nil
 	}
 
@@ -444,7 +442,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	overcommitPercentCPU := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentCPU)/100.0)
 	overcommitPercentMemory := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentMemory)/100.0)
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
-	kubeConfigPath := viper.GetString(FlagKubeConfig)
+	kubeConfigPath := viper.GetString(provider_flags.FlagKubeConfig)
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
