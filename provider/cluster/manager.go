@@ -293,15 +293,19 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 	chErr := make(chan error, 1)
 
 	go func() {
-		hostnames, err := dm.doDeploy(ctx)
+		hostnames, endpoints, err := dm.doDeploy(ctx)
 		if err != nil {
 			chErr <- err
 			return
 		}
 
 		if len(hostnames) != 0 {
-			// start update to takeover hostnames
-			dm.log.Info("hostnames withheld from deployment", "cnt", len(hostnames))
+			// Some hostnames have been withheld
+			dm.log.Info("hostnames withheld from deployment", "cnt", len(hostnames), "lease", dm.lease)
+		}
+
+		if len(endpoints) != 0 {
+			dm.log.Info("endpoints withheld from deployment", "cnt", len(endpoints), "lease", dm.lease)
 		}
 
 		groupCopy := *dm.mgroup
@@ -338,7 +342,7 @@ func (sewsn serviceExposeWithServiceName) idIP() string {
 	return fmt.Sprintf("%s-%s-%d-%v", sewsn.name, sewsn.expose.IP, sewsn.expose.Port, sewsn.expose.Proto)
 }
 
-func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
+func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, error) {
 	cleanupHelper := newDeployCleanupHelper(dm.lease, dm.client, dm.log)
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
@@ -354,17 +358,18 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 	}()
 
 	defer func() {
+		// TODO - run on an isolated context
 		cleanupHelper.purgeAll(ctx)
 		cancel()
 	}()
 
 	if err = dm.checkLeaseActive(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	currentIPs, err := dm.client.GetDeclaredIPs(ctx, dm.lease)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Either reserve the hostnames, or confirm that they already are held
@@ -374,7 +379,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 	if err != nil {
 		deploymentCounter.WithLabelValues("reserve-hostnames", "err").Inc()
 		dm.log.Error("deploy hostname reservation error", "state", dm.state, "err", err)
-		return nil, err
+		return nil, nil, err
 	}
 	deploymentCounter.WithLabelValues("reserve-hostnames", "success").Inc()
 
@@ -412,7 +417,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 	leasedIPs := make([]serviceExposeWithServiceName, 0)
 	hostToServiceName := make(map[string]string)
 	makeIPSharingLKey := func(lID mtypes.LeaseID, name string) string {
-		allowedRegex := regexp.MustCompile(`[a-z,0-9,\-]+`)
+		allowedRegex := regexp.MustCompile(`[a-z0-9\-]+`)
 		effectiveName := name
 		if !allowedRegex.MatchString(name) {
 			h := sha256.New()
@@ -464,7 +469,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		if !stillInUse {
 			proto, err := manifest.ParseServiceProtocol(currentIP.Protocol)
 			if err != nil {
-				return withheldHostnames, err
+				return withheldHostnames, nil, err
 			}
 			cleanupHelper.addIP(currentIP.ServiceName, currentIP.ExternalPort, proto)
 		}
@@ -475,13 +480,13 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		err = dm.client.DeclareHostname(ctx, dm.lease, host, hostToServiceName[host], externalPort)
 		if err != nil {
 			// TODO - counter
-			return withheldHostnames, err
+			return withheldHostnames, nil, err
 		}
 	}
 
+	withheldEndpoints := make([]string, 0)
 	for _, serviceExpose := range leasedIPs {
 		endpointName := serviceExpose.expose.IP
-		// TODO - check if any exist with the same endpointName for a different lease. If so skip creating those
 		sharingKey := makeIPSharingLKey(dm.lease, endpointName)
 
 		externalPort := clusterutil.ExposeExternalPort(serviceExpose.expose)
@@ -491,15 +496,17 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, error) {
 		if err != nil  {
 			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
 				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
-				return withheldHostnames, err
+				return withheldHostnames, nil, err
 			}
 			dm.log.Info("IP declaration already exists", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
-		}
+			withheldEndpoints = append(withheldEndpoints, sharingKey)
 
-		dm.log.Debug("added IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP)
+		} else {
+			dm.log.Debug("added IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP)
+		}
 	}
 
-	return withheldHostnames, nil
+	return withheldHostnames, withheldEndpoints, nil
 }
 
 func (dm *deploymentManager) getCleanupRetryOpts(ctx context.Context) []retry.Option {

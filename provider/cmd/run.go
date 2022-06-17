@@ -321,7 +321,7 @@ func RunCmd() *cobra.Command {
 		return nil
 	}
 
-	cmd.Flags().Bool(FlagEnableIPOperator, false, "")
+	cmd.Flags().Bool(FlagEnableIPOperator, false, "enable usage of the IP operator to lease IP addresses")
 	if err := viper.BindPFlag(FlagEnableIPOperator, cmd.Flags().Lookup(FlagEnableIPOperator)); err != nil {
 		return nil
 	}
