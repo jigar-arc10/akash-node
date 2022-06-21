@@ -211,6 +211,7 @@ type ManifestService struct {
 	Params *ManifestServiceParams `json:"params,omitempty"`
 }
 
+
 func (ms ManifestService) toAkash() (manifest.Service, error) {
 	res, err := ms.Resources.toAkash()
 	if err != nil {
@@ -344,6 +345,13 @@ func (mse ManifestServiceExpose) toAkash() (manifest.ServiceExpose, error) {
 			NextCases:   mse.HTTPOptions.NextCases,
 		},
 	}, nil
+}
+
+func (mse ManifestServiceExpose) DetermineExposedExternalPort() uint16 {
+	if mse.ExternalPort == 0 {
+		return mse.Port
+	}
+	return mse.ExternalPort
 }
 
 func manifestServiceExposeFromAkash(amse manifest.ServiceExpose) ManifestServiceExpose {

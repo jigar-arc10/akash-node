@@ -325,6 +325,13 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPRe
 			err = op.mllbc.CreateIPPassthrough(ctx, directive)
 		}
 	} else {
+
+		/** TODO - the sharing key keeps the IP the same unless
+			this directive purges all the services using that key. This creates
+			a problem where the IP could change. This is not the desired behavior in the system
+			We may need to add a bogus service here temporarily to prevent that from happening
+			OR just try and reorder the operations here
+		 */
 		deleteDirective := ctypes.ClusterIPPassthroughDirective{
 			LeaseID:      entry.presentLease,
 			ServiceName:  entry.presentServiceName,

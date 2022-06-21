@@ -122,6 +122,12 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ipopcl
 	hostnameRouter.HandleFunc(migratePathPrefix, migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
 		Methods(http.MethodPost)
 
+
+	endpointRouter := router.PathPrefix(endpointPrefix).Subrouter()
+	endpointRouter.Use(requireOwner())
+	endpointRouter.HandleFunc(migratePathPrefix, migrateEndpointHandler(log, pclient.ClusterService(), pclient.Cluster())).
+		Methods(http.MethodPost)
+
 	// PUT /deployment/manifest
 	drouter := router.PathPrefix(deploymentPathPrefix).Subrouter()
 	drouter.Use(

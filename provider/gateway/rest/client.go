@@ -55,6 +55,7 @@ type Client interface {
 		tty bool,
 		tsq <-chan remotecommand.TerminalSize) error
 	MigrateHostnames(ctx context.Context, hostnames []string, dseq uint64, gseq uint32) error
+	MigrateEndpoints(ctx context.Context, endpoints []string, dseq uint64, gseq uint32) error
 }
 
 type JwtClient interface {
@@ -431,6 +432,46 @@ func (c *client) SubmitManifest(ctx context.Context, dseq uint64, mani manifest.
 	}
 
 	req.Header.Set("Content-Type", contentTypeJSON)
+	resp, err := c.hclient.Do(req)
+	if err != nil {
+		return err
+	}
+	responseBuf := &bytes.Buffer{}
+	_, err = io.Copy(responseBuf, resp.Body)
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	return createClientResponseErrorIfNotOK(resp, responseBuf)
+}
+
+func (c *client) MigrateEndpoints(ctx context.Context, endpoints []string, dseq uint64, gseq uint32) error {
+	uri, err := makeURI(c.host, "endpoint/migrate")
+	if err != nil {
+		return err
+	}
+
+	body := endpointMigrateRequestBody{
+		EndpointsToMigrate: endpoints,
+		DestinationDSeq:    dseq,
+		DestinationGSeq:    gseq,
+	}
+
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", contentTypeJSON)
+
 	resp, err := c.hclient.Do(req)
 	if err != nil {
 		return err

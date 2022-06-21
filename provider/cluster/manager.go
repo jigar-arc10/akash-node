@@ -2,13 +2,8 @@ package cluster
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base32"
 	"fmt"
 	kubeclienterrors "github.com/ovrclk/akash/provider/cluster/kube/errors"
-	"io"
-	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -305,6 +300,7 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 		}
 
 		if len(endpoints) != 0 {
+			// Some endpoints have been withheld
 			dm.log.Info("endpoints withheld from deployment", "cnt", len(endpoints), "lease", dm.lease)
 		}
 
@@ -416,20 +412,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	hosts := make(map[string]manifest.ServiceExpose)
 	leasedIPs := make([]serviceExposeWithServiceName, 0)
 	hostToServiceName := make(map[string]string)
-	makeIPSharingLKey := func(lID mtypes.LeaseID, name string) string {
-		allowedRegex := regexp.MustCompile(`[a-z0-9\-]+`)
-		effectiveName := name
-		if !allowedRegex.MatchString(name) {
-			h := sha256.New()
-			_, err = io.WriteString(h, name)
-			if err != nil {
-				panic(err)
 
-			}
-			effectiveName = strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(h.Sum(nil)[0:15]))
-		}
-		return fmt.Sprintf("%s-ip-%s", lID.GetOwner(), effectiveName)
-	}
 	ipsInThisRequest := make(map[string]serviceExposeWithServiceName)
 	// clear this out so it gets repopulated
 	dm.currentHostnames = make(map[string]struct{})
@@ -457,8 +440,8 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 			if expose.Global && len(expose.IP) != 0 {
 				v := serviceExposeWithServiceName{expose: expose, name: service.Name}
 				leasedIPs = append(leasedIPs, v)
-				ipsInThisRequest[makeIPSharingLKey(dm.lease, expose.IP)] = v
-
+				sharingKey := clusterutil.MakeIPSharingKey(dm.lease, expose.IP)
+				ipsInThisRequest[sharingKey] = v
 			}
 		}
 	}
@@ -487,7 +470,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	withheldEndpoints := make([]string, 0)
 	for _, serviceExpose := range leasedIPs {
 		endpointName := serviceExpose.expose.IP
-		sharingKey := makeIPSharingLKey(dm.lease, endpointName)
+		sharingKey := clusterutil.MakeIPSharingKey(dm.lease, endpointName)
 
 		externalPort := clusterutil.ExposeExternalPort(serviceExpose.expose)
 		port := serviceExpose.expose.Port
