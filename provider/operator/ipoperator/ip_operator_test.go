@@ -1,27 +1,17 @@
 package ipoperator
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"github.com/gorilla/mux"
 	manifest "github.com/ovrclk/akash/manifest/v2beta1"
 	"github.com/ovrclk/akash/provider/cluster/mocks"
 	"github.com/ovrclk/akash/provider/cluster/types/v1beta2"
-	clusterutil "github.com/ovrclk/akash/provider/cluster/util"
 	"github.com/ovrclk/akash/provider/operator/operatorcommon"
 	"github.com/ovrclk/akash/testutil"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"io"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"strconv"
 	"testing"
 	"time"
 )
@@ -40,57 +30,25 @@ func runIPOperator(t *testing.T, run bool, prerun, fn func(ctx context.Context, 
 	defer cancel()
 
 	providerAddr := testutil.AccAddress(t)
-	buf := &bytes.Buffer{}
-	enc := json.NewEncoder(buf)
-	err := enc.Encode(map[string]string{
-		"address": providerAddr.String(),
-	})
-	require.NoError(t, err)
-
-	addrJSONBytes := buf.Bytes()
-	router := mux.NewRouter()
-
-	addressRequestNotify := make(chan struct{}, 1)
-	router.HandleFunc("/address", func(rw http.ResponseWriter, _ *http.Request) {
-		rw.WriteHeader(http.StatusOK)
-		_, err = io.Copy(rw, bytes.NewReader(addrJSONBytes))
-		if err == nil {
-			select {
-			case addressRequestNotify <- struct{}{}:
-			default:
-				// do nothing
-			}
-		}
-	})
-
-	fakeProvider := httptest.NewTLSServer(router)
-	defer fakeProvider.Close()
 
 	l := testutil.Logger(t)
 	client := &mocks.Client{}
 	mllbc := &mocks.MetalLBClient{}
 	mllbc.On("Stop")
 
-	providerURL, err := url.Parse(fakeProvider.URL)
-	require.NoError(t, err)
-	providerPort, err := strconv.ParseUint(providerURL.Port(), 0, 16)
-	require.NoError(t, err)
-
-	// Fake the discovery of the provider
-	sda, err := clusterutil.NewServiceDiscoveryAgent(l, nil, "", "", "", &net.SRV{
-		Target:   providerURL.Hostname(),
-		Port:     uint16(providerPort),
-		Priority: 0,
-		Weight:   0,
-	})
-	require.NoError(t, err)
 
 	ilc := operatorcommon.IgnoreListConfig{
 		FailureLimit: 100,
 		EntryLimit:   9999,
 		AgeLimit:     time.Hour,
 	}
-	op, err := newIPOperator(l, client, ilc, mllbc, sda)
+	opcfg := operatorcommon.OperatorConfig{
+		PruneInterval:      time.Second,
+		WebRefreshInterval: time.Second,
+		RetryDelay:         time.Second,
+		ProviderAddress:    providerAddr.String(),
+	}
+	op, err := newIPOperator(l, client, opcfg, ilc, mllbc)
 
 	require.NoError(t, err)
 	require.NotNil(t, op)
@@ -111,13 +69,6 @@ func runIPOperator(t *testing.T, run bool, prerun, fn func(ctx context.Context, 
 			defer close(done)
 			done <- op.run(ctx)
 		}()
-
-		// Wait for startup stuff
-		select {
-		case <-addressRequestNotify:
-		case <-ctx.Done():
-			t.Fatal("timed out waiting for initial request for provider address")
-		}
 
 		fn(ctx, s)
 		cancel()
@@ -174,7 +125,7 @@ func TestIPOperatorAddEvent(t *testing.T) {
 		require.NotNil(t, s.op)
 		leaseID := testutil.LeaseID(t)
 
-		s.metalMock.On("CreateIPPassthrough", mock.Anything, leaseID,
+		s.metalMock.On("CreateIPPassthrough", mock.Anything,
 			v1beta2.ClusterIPPassthroughDirective{
 				LeaseID:      leaseID,
 				ServiceName:  "aservice",
@@ -197,12 +148,13 @@ func TestIPOperatorAddEvent(t *testing.T) {
 	})
 }
 
+// Add for updating to a different lease
 func TestIPOperatorUpdateEvent(t *testing.T) {
 	runIPOperator(t, false, nil, func(ctx context.Context, s ipOperatorScaffold) {
 		require.NotNil(t, s.op)
 		leaseID := testutil.LeaseID(t)
 
-		s.metalMock.On("CreateIPPassthrough", mock.Anything, leaseID,
+		s.metalMock.On("CreateIPPassthrough", mock.Anything,
 			v1beta2.ClusterIPPassthroughDirective{
 				LeaseID:      leaseID,
 				ServiceName:  "aservice",
@@ -230,7 +182,7 @@ func TestIPOperatorDeleteEvent(t *testing.T) {
 		require.NotNil(t, s.op)
 		leaseID := testutil.LeaseID(t)
 
-		s.metalMock.On("PurgeIPPassthrough", mock.Anything, leaseID,
+		s.metalMock.On("PurgeIPPassthrough", mock.Anything,
 			v1beta2.ClusterIPPassthroughDirective{
 				LeaseID:      leaseID,
 				ServiceName:  "aservice",
@@ -262,7 +214,7 @@ func TestIPOperatorGivesUpOnErrors(t *testing.T) {
 		require.NotNil(t, s.op)
 		leaseID := testutil.LeaseID(t)
 
-		s.metalMock.On("CreateIPPassthrough", mock.Anything, leaseID,
+		s.metalMock.On("CreateIPPassthrough", mock.Anything,
 			v1beta2.ClusterIPPassthroughDirective{
 				LeaseID:      leaseID,
 				ServiceName:  "aservice",
@@ -320,10 +272,11 @@ func TestIPOperatorRun(t *testing.T) {
 			default:
 			}
 		}()
-		eventsRead := <-chan v1beta2.IPResourceEvent(events)
+		var eventsRead <- chan v1beta2.IPResourceEvent
+		eventsRead = events
 		s.clusterMock.On("ObserveIPState", mock.Anything).Return(eventsRead, nil)
 
-		s.metalMock.On("CreateIPPassthrough", mock.Anything, leaseID,
+		s.metalMock.On("CreateIPPassthrough", mock.Anything,
 			v1beta2.ClusterIPPassthroughDirective{
 				LeaseID:      leaseID,
 				ServiceName:  "aservice",

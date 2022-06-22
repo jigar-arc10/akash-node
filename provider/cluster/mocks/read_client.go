@@ -66,6 +66,29 @@ func (_m *ReadClient) ForwardedPortStatus(_a0 context.Context, _a1 typesv1beta2.
 	return r0, r1
 }
 
+// GetDeclaredIPs provides a mock function with given fields: ctx, leaseID
+func (_m *ReadClient) GetDeclaredIPs(ctx context.Context, leaseID typesv1beta2.LeaseID) ([]v2beta1.ProviderLeasedIPSpec, error) {
+	ret := _m.Called(ctx, leaseID)
+
+	var r0 []v2beta1.ProviderLeasedIPSpec
+	if rf, ok := ret.Get(0).(func(context.Context, typesv1beta2.LeaseID) []v2beta1.ProviderLeasedIPSpec); ok {
+		r0 = rf(ctx, leaseID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]v2beta1.ProviderLeasedIPSpec)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, typesv1beta2.LeaseID) error); ok {
+		r1 = rf(ctx, leaseID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetHostnameDeploymentConnections provides a mock function with given fields: ctx
 func (_m *ReadClient) GetHostnameDeploymentConnections(ctx context.Context) ([]v1beta2.LeaseIDHostnameConnection, error) {
 	ret := _m.Called(ctx)

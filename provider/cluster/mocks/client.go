@@ -80,13 +80,13 @@ func (_m *Client) DeclareHostname(ctx context.Context, lID typesv1beta2.LeaseID,
 	return r0
 }
 
-// DeclareIP provides a mock function with given fields: ctx, lID, serviceName, port, externalPort, proto, sharingKey
-func (_m *Client) DeclareIP(ctx context.Context, lID typesv1beta2.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta1.ServiceProtocol, sharingKey string) error {
-	ret := _m.Called(ctx, lID, serviceName, port, externalPort, proto, sharingKey)
+// DeclareIP provides a mock function with given fields: ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite
+func (_m *Client) DeclareIP(ctx context.Context, lID typesv1beta2.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta1.ServiceProtocol, sharingKey string, overwrite bool) error {
+	ret := _m.Called(ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, typesv1beta2.LeaseID, string, uint32, uint32, v2beta1.ServiceProtocol, string) error); ok {
-		r0 = rf(ctx, lID, serviceName, port, externalPort, proto, sharingKey)
+	if rf, ok := ret.Get(0).(func(context.Context, typesv1beta2.LeaseID, string, uint32, uint32, v2beta1.ServiceProtocol, string, bool) error); ok {
+		r0 = rf(ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -170,6 +170,29 @@ func (_m *Client) ForwardedPortStatus(_a0 context.Context, _a1 typesv1beta2.Leas
 	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, typesv1beta2.LeaseID) error); ok {
 		r1 = rf(_a0, _a1)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetDeclaredIPs provides a mock function with given fields: ctx, leaseID
+func (_m *Client) GetDeclaredIPs(ctx context.Context, leaseID typesv1beta2.LeaseID) ([]akash_networkv2beta1.ProviderLeasedIPSpec, error) {
+	ret := _m.Called(ctx, leaseID)
+
+	var r0 []akash_networkv2beta1.ProviderLeasedIPSpec
+	if rf, ok := ret.Get(0).(func(context.Context, typesv1beta2.LeaseID) []akash_networkv2beta1.ProviderLeasedIPSpec); ok {
+		r0 = rf(ctx, leaseID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]akash_networkv2beta1.ProviderLeasedIPSpec)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, typesv1beta2.LeaseID) error); ok {
+		r1 = rf(ctx, leaseID)
 	} else {
 		r1 = ret.Error(1)
 	}
