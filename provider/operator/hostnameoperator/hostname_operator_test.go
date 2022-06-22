@@ -123,11 +123,14 @@ func makeHostnameOperatorScaffold(t *testing.T) *hostnameOperatorScaffold {
 	}
 	l := testutil.Logger(t)
 
-	op, err := newHostnameOperator(l, client, hostnameOperatorConfig{
-		pruneInterval:      time.Hour,
-		webRefreshInterval: time.Second,
-		retryDelay:         time.Second,
-	},
+	opcfg := operatorcommon.OperatorConfig{
+		PruneInterval:      time.Hour,
+		WebRefreshInterval: time.Second,
+		RetryDelay:         time.Second,
+		ProviderAddress:    "",
+	}
+
+	op, err := newHostnameOperator(l, client, opcfg,
 		operatorcommon.IgnoreListConfig{
 			FailureLimit: 3,
 			EntryLimit:   19,
