@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	flagProviderAddress = "provider"
+)
+
 func AddOperatorFlags(cmd *cobra.Command, defaultListenAddress string) {
 	cmd.Flags().String(provider_flags.FlagK8sManifestNS, "lease", "Cluster manifest namespace")
 	if err := viper.BindPFlag(provider_flags.FlagK8sManifestNS, cmd.Flags().Lookup(provider_flags.FlagK8sManifestNS)); err != nil {
@@ -30,6 +34,13 @@ func AddOperatorFlags(cmd *cobra.Command, defaultListenAddress string) {
 
 	cmd.Flags().Duration(provider_flags.FlagRetryDelay, 3*time.Second, "retry delay")
 	if err := viper.BindPFlag(provider_flags.FlagRetryDelay, cmd.Flags().Lookup(provider_flags.FlagRetryDelay)); err != nil {
+		panic(err)
+	}
+}
+
+func AddProviderFlag(cmd *cobra.Command) {
+	cmd.Flags().String(flagProviderAddress, "", "address of associated provider in bech32")
+	if err := viper.BindPFlag(flagProviderAddress, cmd.Flags().Lookup(flagProviderAddress)); err != nil {
 		panic(err)
 	}
 }

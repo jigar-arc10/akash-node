@@ -56,7 +56,7 @@ hostname-operator:
 
 .PHONY: ip-operator
 ip-operator:
-	$(AKASH) provider ip-operator
+	$(AKASH) provider ip-operator --provider=$(PROVIDER_ADDRESS)
 
 
 .PHONY: clean-$(KIND_NAME)

@@ -10,6 +10,7 @@ type OperatorConfig struct {
 	PruneInterval      time.Duration
 	WebRefreshInterval time.Duration
 	RetryDelay         time.Duration
+	ProviderAddress    string
 }
 
 func GetOperatorConfigFromViper() OperatorConfig {
@@ -17,6 +18,7 @@ func GetOperatorConfigFromViper() OperatorConfig {
 		PruneInterval:      viper.GetDuration(provider_flags.FlagPruneInterval),
 		WebRefreshInterval: viper.GetDuration(provider_flags.FlagWebRefreshInterval),
 		RetryDelay:         viper.GetDuration(provider_flags.FlagRetryDelay),
+		ProviderAddress: viper.GetString(flagProviderAddress),
 	}
 }
 

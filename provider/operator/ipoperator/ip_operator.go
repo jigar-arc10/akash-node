@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/avast/retry-go"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gorilla/mux"
 	"github.com/ovrclk/akash/provider/cluster"
 	clusterClient "github.com/ovrclk/akash/provider/cluster/kube"
-	"github.com/ovrclk/akash/provider/cluster/kube/clientcommon"
 	"github.com/ovrclk/akash/provider/cluster/kube/metallb"
 	"github.com/ovrclk/akash/provider/cluster/types/v1beta2"
 	ctypes "github.com/ovrclk/akash/provider/cluster/types/v1beta2"
@@ -38,10 +36,6 @@ const (
 	serviceMetalLb  = "metal-lb"
 )
 
-var (
-	errIPOperator = errors.New("ip operator failure")
-)
-
 
 type ipOperator struct {
 	state             map[string]managedIP
@@ -52,7 +46,6 @@ type ipOperator struct {
 	flagState         operatorcommon.PrepareFlagFn
 	flagIgnoredLeases operatorcommon.PrepareFlagFn
 	flagUsage         operatorcommon.PrepareFlagFn
-	providerAddr      string
 	cfg operatorcommon.OperatorConfig
 
 	available uint
@@ -60,7 +53,6 @@ type ipOperator struct {
 
 	mllbc metallb.Client
 
-	providerSda clusterutil.ServiceDiscoveryAgent
 	barrier     *barrier
 
 	dataLock sync.Locker
@@ -69,13 +61,7 @@ type ipOperator struct {
 func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
 	var err error
 
-	op.log.Info("getting provider address")
-
-	op.providerAddr, err = op.getProviderWalletAddress(parentCtx)
-	if err != nil {
-		return err
-	}
-	op.log.Info("associated provider ", "addr", op.providerAddr)
+	op.log.Info("associated provider ", "addr", op.cfg.ProviderAddress)
 
 	op.state = make(map[string]managedIP)
 	op.log.Info("fetching existing IP passthroughs")
@@ -329,8 +315,7 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPRe
 		/** TODO - the sharing key keeps the IP the same unless
 			this directive purges all the services using that key. This creates
 			a problem where the IP could change. This is not the desired behavior in the system
-			We may need to add a bogus service here temporarily to prevent that from happening
-			OR just try and reorder the operations here
+			We may need to add a bogus service here temporarily to prevent that from happening			
 		 */
 		deleteDirective := ctypes.ClusterIPPassthroughDirective{
 			LeaseID:      entry.presentLease,
@@ -451,76 +436,7 @@ func handleHTTPError(op *ipOperator, rw http.ResponseWriter, req *http.Request, 
 	}
 }
 
-func (op *ipOperator) getProviderWalletAddress(parentCtx context.Context) (string, error) {
-	// This is tried in a loop, so never wait fo a long period of time for it to complete
-	ctx, cancel := context.WithTimeout(parentCtx, time.Minute)
-	defer cancel()
-
-	// Resolve the hostname & port
-	providerClient, err := op.providerSda.GetClient(ctx, true, false)
-
-	if err != nil {
-		op.log.Error("could not discover provider address", "error", err)
-		return "", err
-	}
-
-	// The gateway client isn't used here because it tries to query the blockchain. This is an antipattern
-	// for an operator
-	statusReq, err := providerClient.CreateRequest(ctx, http.MethodGet, "/address", nil)
-	if err != nil {
-		return "", err
-	}
-
-	retryOptions := []retry.Option{
-		retry.Context(ctx),
-		retry.DelayType(retry.BackOffDelay),
-		retry.MaxDelay(time.Second * 15),
-		retry.Attempts(5),
-		retry.LastErrorOnly(true),
-	}
-
-	var response *http.Response
-	err = retry.Do(func() error {
-		var err error
-		response, err = providerClient.DoRequest(statusReq)
-		if err != nil {
-			op.log.Error("failed asking provider for status", "error", err)
-			return err
-		}
-		return nil
-	}, retryOptions...)
-
-	if err != nil {
-		return "", err
-	}
-
-	if response.StatusCode != http.StatusOK {
-		op.log.Error("provider status API failed", "status", response.StatusCode)
-		return "", fmt.Errorf("%w: provider status API returned status: %d", errIPOperator, response.StatusCode)
-	}
-
-	statusData := struct {
-		Address string `json:"address"`
-	}{}
-	decoder := json.NewDecoder(response.Body)
-	err = decoder.Decode(&statusData)
-	if err != nil {
-		op.log.Error("could not decode provider status API response", "error", err)
-		return "", err
-
-	}
-	providerAddr := statusData.Address
-
-	_, err = sdk.AccAddressFromBech32(providerAddr)
-	if err != nil {
-		op.log.Error("provider status API returned invalid bech32 address", "provider-addr", providerAddr, "error", err)
-		return "", err
-	}
-
-	return providerAddr, nil
-}
-
-func newIPOperator(logger log.Logger, client cluster.Client, cfg operatorcommon.OperatorConfig, ilc operatorcommon.IgnoreListConfig, mllbc metallb.Client, providerSda clusterutil.ServiceDiscoveryAgent) (*ipOperator, error) {
+func newIPOperator(logger log.Logger, client cluster.Client, cfg operatorcommon.OperatorConfig, ilc operatorcommon.IgnoreListConfig, mllbc metallb.Client) (*ipOperator, error) {
 	opHTTP, err := operatorcommon.NewOperatorHTTP()
 	if err != nil {
 		return nil, err
@@ -533,7 +449,6 @@ func newIPOperator(logger log.Logger, client cluster.Client, cfg operatorcommon.
 		leasesIgnored: operatorcommon.NewIgnoreList(ilc),
 		mllbc:         mllbc,
 		dataLock:      &sync.Mutex{},
-		providerSda:   providerSda,
 		barrier:       &barrier{},
 		cfg: cfg,
 	}
@@ -606,7 +521,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 		DSeq:     dseq,
 		GSeq:     uint32(gseq),
 		OSeq:     uint32(oseq),
-		Provider: op.providerAddr,
+		Provider: op.cfg.ProviderAddress,
 	}
 
 	ipStatus, err := op.mllbc.GetIPAddressStatusForLease(req.Context(), leaseID)
@@ -647,9 +562,10 @@ func doIPOperator(cmd *cobra.Command) error {
 	poolName := viper.GetString(flagMetalLbPoolName)
 	logger := operatorcommon.OpenLogger().With("operator", "ip")
 
-	kubeConfig, err := clientcommon.OpenKubeConfig(configPath, logger)
+	opcfg := operatorcommon.GetOperatorConfigFromViper()
+	_, err := sdk.AccAddressFromBech32(opcfg.ProviderAddress)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: provider address must valid bech32", err)
 	}
 
 	client, err := clusterClient.NewClient(logger, ns, configPath)
@@ -667,19 +583,10 @@ func doIPOperator(cmd *cobra.Command) error {
 		return err
 	}
 
-	providerEndpoint, err := provider_flags.GetServiceEndpointFlagValue(logger, serviceProvider)
-	if err != nil {
-		return err
-	}
-
-	providerSda, err := clusterutil.NewServiceDiscoveryAgent(logger, kubeConfig, "gateway", "akash-provider", "akash-services", providerEndpoint)
-	if err != nil {
-		return err
-	}
 	logger.Info("clients", "kube", client, "metallb", mllbc)
 	logger.Info("HTTP listening", "address", listenAddr)
 
-	op, err := newIPOperator(logger, client, operatorcommon.GetOperatorConfigFromViper(), operatorcommon.IgnoreListConfigFromViper(), mllbc, providerSda)
+	op, err := newIPOperator(logger, client, opcfg, operatorcommon.IgnoreListConfigFromViper(), mllbc)
 	if err != nil {
 		return err
 	}
@@ -735,7 +642,6 @@ func (op *ipOperator) run(parentCtx context.Context) error {
 		}
 	}
 
-	op.providerSda.Stop()
 	op.mllbc.Stop()
 	return parentCtx.Err()
 }

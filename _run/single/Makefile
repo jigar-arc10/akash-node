@@ -43,6 +43,7 @@ kustomize-init-hostname-operator:
 
 .PHONY: kustomize-init-ip-operator
 kustomize-init-ip-operator:
+	echo "provider-address=$(PROVIDER_ADDRESS)" > $(CURDIR)/kustomize/akash-ip-operator/operator.properties
 
 .PHONY: kustomize-install-node
 kustomize-install-node:

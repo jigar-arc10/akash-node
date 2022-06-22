@@ -60,6 +60,11 @@ spec:
               configMapKeyRef:
                 name: akash-ip-operator-config
                 key: event-failure-limit
+          - name: AKASH_PROVIDER
+            valueFrom:
+              configMapKeyRef:
+                name: akash-ip-operator-config
+                key: provider-address
 
         volumeMounts:
           - name: boot

@@ -22,10 +22,8 @@ func Cmd() *cobra.Command {
 	}
 	operatorcommon.AddOperatorFlags(cmd, "0.0.0.0:8086")
 	operatorcommon.AddIgnoreListFlags(cmd)
+	operatorcommon.AddProviderFlag(cmd)
 
-	if err := provider_flags.AddServiceEndpointFlag(cmd, serviceProvider); err != nil {
-		return nil
-	}
 	if err := provider_flags.AddServiceEndpointFlag(cmd, serviceMetalLb); err != nil {
 		return nil
 	}

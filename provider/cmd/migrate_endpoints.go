@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var errEmptyEndpoints = errors.New("hostnames cannot be empty")
+var errEmptyEndpoints = errors.New("endpoints cannot be empty")
 
 func migrateEndpoints(cmd *cobra.Command, args []string) error {
 	endpoints := args
