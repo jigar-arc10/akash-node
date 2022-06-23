@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"fmt"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	provider_flags "github.com/ovrclk/akash/provider/cmd/flags"
 	"github.com/ovrclk/akash/provider/operator/hostnameoperator"
 	"github.com/ovrclk/akash/provider/operator/ipoperator"
@@ -159,14 +160,14 @@ func RunLocalHostnameOperator(ctx context.Context, clientCtx cosmosclient.Contex
 	return testutilcli.ExecTestCLICmd(ctx, clientCtx, cmd, args...)
 }
 
-func RunLocalIPOerator(ctx context.Context, clientCtx cosmosclient.Context, listenAddress string, providerEndpoint string) (sdktest.BufferWriter, error) {
+func RunLocalIPOerator(ctx context.Context, clientCtx cosmosclient.Context, listenAddress string, providerAddress sdk.AccAddress) (sdktest.BufferWriter, error) {
 	takeCmdLock()
 	cmd := ipoperator.Cmd()
 	releaseCmdLock()
 
 	args := []string{
 		fmt.Sprintf("--%s=%s", provider_flags.FlagListenAddress, listenAddress),
-		fmt.Sprintf("--provider-endpoint=%s", providerEndpoint),
+		fmt.Sprintf("--provider=%s", providerAddress.String()),
 	}
 
 	return testutilcli.ExecTestCLICmd(ctx, clientCtx, cmd, args...)

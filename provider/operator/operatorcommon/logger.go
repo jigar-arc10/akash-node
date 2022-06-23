@@ -1,6 +1,7 @@
 package operatorcommon
 
 import (
+	// nolint: golint, staticcheck
 	"github.com/go-kit/kit/log/term"
 	"github.com/tendermint/tendermint/libs/log"
 	"os"

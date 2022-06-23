@@ -628,7 +628,7 @@ type confirmationItem struct {
 
 type runCheckResult struct {
 	inventoryResult ctypes.Inventory
-	ipResult ipoptypes.IPAddressUsage
+	ipResult        ipoptypes.IPAddressUsage
 	confirmedResult []mtypes.OrderID
 }
 
@@ -665,14 +665,12 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 			return runner.NewResult(nil, err)
 		}
 
-
 		if is.ipOperator != nil {
 			retval.ipResult, err = is.ipOperator.GetIPAddressUsage(ctx)
 			if err != nil {
 				return runner.NewResult(nil, err)
 			}
 		}
-
 
 		for _, confirmItem := range confirm {
 			status, err := is.ipOperator.GetIPAddressStatus(ctx, confirmItem.orderID)

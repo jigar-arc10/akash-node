@@ -24,4 +24,3 @@ func MakeIPSharingKey(lID mtypes.LeaseID, endpointName string) string {
 	}
 	return fmt.Sprintf("%s-ip-%s", lID.GetOwner(), effectiveName)
 }
-

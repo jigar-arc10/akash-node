@@ -32,10 +32,8 @@ import (
 )
 
 const (
-	serviceProvider = "provider"
-	serviceMetalLb  = "metal-lb"
+	serviceMetalLb = "metal-lb"
 )
-
 
 type ipOperator struct {
 	state             map[string]managedIP
@@ -46,14 +44,14 @@ type ipOperator struct {
 	flagState         operatorcommon.PrepareFlagFn
 	flagIgnoredLeases operatorcommon.PrepareFlagFn
 	flagUsage         operatorcommon.PrepareFlagFn
-	cfg operatorcommon.OperatorConfig
+	cfg               operatorcommon.OperatorConfig
 
 	available uint
 	inUse     uint
 
 	mllbc metallb.Client
 
-	barrier     *barrier
+	barrier *barrier
 
 	dataLock sync.Locker
 }
@@ -270,7 +268,6 @@ func getStateKey(leaseID mtypes.LeaseID, sharingKey string, externalPort uint32)
 func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPResourceEvent) error {
 	leaseID := ev.GetLeaseID()
 
-
 	uid := getStateKey(ev.GetLeaseID(), ev.GetSharingKey(), ev.GetExternalPort())
 
 	op.log.Info("connecting",
@@ -313,10 +310,10 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPRe
 	} else {
 
 		/** TODO - the sharing key keeps the IP the same unless
-			this directive purges all the services using that key. This creates
-			a problem where the IP could change. This is not the desired behavior in the system
-			We may need to add a bogus service here temporarily to prevent that from happening			
-		 */
+		this directive purges all the services using that key. This creates
+		a problem where the IP could change. This is not the desired behavior in the system
+		We may need to add a bogus service here temporarily to prevent that from happening
+		*/
 		deleteDirective := ctypes.ClusterIPPassthroughDirective{
 			LeaseID:      entry.presentLease,
 			ServiceName:  entry.presentServiceName,
@@ -450,7 +447,7 @@ func newIPOperator(logger log.Logger, client cluster.Client, cfg operatorcommon.
 		mllbc:         mllbc,
 		dataLock:      &sync.Mutex{},
 		barrier:       &barrier{},
-		cfg: cfg,
+		cfg:           cfg,
 	}
 
 	retval.server.GetRouter().Use(func(next http.Handler) http.Handler {

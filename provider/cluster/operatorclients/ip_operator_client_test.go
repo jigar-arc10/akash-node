@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/cosmos/cosmos-sdk/server"
 	ipoptypes "github.com/ovrclk/akash/provider/operator/ipoperator/types"
 	"github.com/ovrclk/akash/testutil"
@@ -20,16 +21,16 @@ import (
 
 type fakeIPOperator struct {
 	healthStatus uint32
-	mux *http.ServeMux
+	mux          *http.ServeMux
 
 	ipLeaseStatusResponse atomic.Value
-	ipLeaseStatusStatus uint32
+	ipLeaseStatusStatus   uint32
 
-	ipUsageStatus uint32
+	ipUsageStatus   uint32
 	ipUsageResponse atomic.Value
 }
 
-func (fio *fakeIPOperator) setHealthStatus(status int){
+func (fio *fakeIPOperator) setHealthStatus(status int) {
 	atomic.StoreUint32(&fio.healthStatus, uint32(status))
 }
 
@@ -38,28 +39,28 @@ func (fio *fakeIPOperator) setIPLeaseStatusResponse(status int, body []byte) {
 	fio.ipLeaseStatusResponse.Store(body)
 }
 
-func (fio *fakeIPOperator) setIPUsageResponse(status int, body []byte){
+func (fio *fakeIPOperator) setIPUsageResponse(status int, body []byte) {
 	atomic.StoreUint32(&fio.ipUsageStatus, uint32(status))
 	fio.ipUsageResponse.Store(body)
 }
 
-func fakeIPOperatorHandler() *fakeIPOperator{
+func fakeIPOperatorHandler() *fakeIPOperator {
 	fake := &fakeIPOperator{
-		healthStatus: http.StatusServiceUnavailable,
-		mux: http.NewServeMux(),
+		healthStatus:        http.StatusServiceUnavailable,
+		mux:                 http.NewServeMux(),
 		ipLeaseStatusStatus: http.StatusServiceUnavailable,
-		ipUsageStatus: http.StatusServiceUnavailable,
+		ipUsageStatus:       http.StatusServiceUnavailable,
 	}
 	fake.ipLeaseStatusResponse.Store([]byte{})
 	fake.ipUsageResponse.Store([]byte{})
 
 	fake.mux.HandleFunc("/health",
-		func(rw http.ResponseWriter, req *http.Request){
+		func(rw http.ResponseWriter, req *http.Request) {
 			status := atomic.LoadUint32(&fake.healthStatus)
 			rw.WriteHeader(int(status))
 		})
 
-	fake.mux.HandleFunc("/ip-lease-status/", func(rw http.ResponseWriter, req *http.Request){
+	fake.mux.HandleFunc("/ip-lease-status/", func(rw http.ResponseWriter, req *http.Request) {
 		status := atomic.LoadUint32(&fake.ipLeaseStatusStatus)
 		rw.WriteHeader(int(status))
 
@@ -67,7 +68,7 @@ func fakeIPOperatorHandler() *fakeIPOperator{
 		_, _ = io.Copy(rw, bytes.NewReader(body))
 	})
 
-	fake.mux.HandleFunc("/usage", func(rw http.ResponseWriter, req *http.Request){
+	fake.mux.HandleFunc("/usage", func(rw http.ResponseWriter, req *http.Request) {
 		status := atomic.LoadUint32(&fake.ipUsageStatus)
 		rw.WriteHeader(int(status))
 
@@ -78,21 +79,21 @@ func fakeIPOperatorHandler() *fakeIPOperator{
 	return fake
 }
 
-func TestIPOperatorClient(t *testing.T){
+func TestIPOperatorClient(t *testing.T) {
 	_, port, err := server.FreeTCPAddr()
 	require.NoError(t, err)
 
 	fake := fakeIPOperatorHandler()
 	fakeServer := &http.Server{
-		Addr: "localhost:" + port,
-		Handler: fake.mux,
-		ReadTimeout:    1 * time.Second,
-		WriteTimeout:   1 * time.Second,
+		Addr:         "localhost:" + port,
+		Handler:      fake.mux,
+		ReadTimeout:  1 * time.Second,
+		WriteTimeout: 1 * time.Second,
 	}
 
 	go func() {
 		err := fakeServer.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}()
@@ -119,7 +120,7 @@ func TestIPOperatorClient(t *testing.T){
 	require.NotNil(t, ipop)
 	defer ipop.Stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	// Description should have a value
@@ -175,6 +176,6 @@ func TestIPOperatorClient(t *testing.T){
 	require.Equal(t, ipoptypes.IPAddressUsage{
 		Available: 13,
 		InUse:     14,
-	},usage)
+	}, usage)
 
 }

@@ -64,7 +64,7 @@ func (s *sdl) UnmarshalYAML(node *yaml.Node) error {
 
 		result.data = &decoded
 	} else {
-		return fmt.Errorf("config: unsupported version %q", result.Version)
+		return fmt.Errorf("%w: config: unsupported version %q", errSDLInvalid, result.Version)
 	}
 
 	*s = result

@@ -26,7 +26,7 @@ func (sp ServiceProtocol) ToString() string {
 }
 
 func (sp ServiceProtocol) ToKube() (corev1.Protocol, error) {
-	switch(sp){
+	switch sp {
 	case TCP:
 		return corev1.ProtocolTCP, nil
 	case UDP:
@@ -36,8 +36,8 @@ func (sp ServiceProtocol) ToKube() (corev1.Protocol, error) {
 	return corev1.Protocol(""), fmt.Errorf("%w: %v", errUnknownServiceProtocol, sp)
 }
 
-func ServiceProtocolFromKube(proto corev1.Protocol) (ServiceProtocol, error){
-	switch(proto) {
+func ServiceProtocolFromKube(proto corev1.Protocol) (ServiceProtocol, error) {
+	switch proto {
 	case corev1.ProtocolTCP:
 		return TCP, nil
 	case corev1.ProtocolUDP:

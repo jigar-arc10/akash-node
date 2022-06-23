@@ -18,7 +18,6 @@ func GetOperatorConfigFromViper() OperatorConfig {
 		PruneInterval:      viper.GetDuration(provider_flags.FlagPruneInterval),
 		WebRefreshInterval: viper.GetDuration(provider_flags.FlagWebRefreshInterval),
 		RetryDelay:         viper.GetDuration(provider_flags.FlagRetryDelay),
-		ProviderAddress: viper.GetString(flagProviderAddress),
+		ProviderAddress:    viper.GetString(flagProviderAddress),
 	}
 }
-

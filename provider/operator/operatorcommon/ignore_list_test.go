@@ -48,7 +48,7 @@ func TestIgnoreList(t *testing.T) {
 }
 
 func TestIgnoreListFailureLimit(t *testing.T) {
-	failureLimit := uint(testutil.RandRangeInt(3,10))
+	failureLimit := uint(testutil.RandRangeInt(3, 10))
 	il := NewIgnoreList(IgnoreListConfig{
 		FailureLimit: failureLimit,
 		EntryLimit:   100,
@@ -60,9 +60,9 @@ func TestIgnoreListFailureLimit(t *testing.T) {
 		lid := testutil.LeaseID(t)
 		require.False(t, il.IsFlagged(lid))
 
-		for j := uint(0); j != failureLimit ; j++ {
+		for j := uint(0); j != failureLimit; j++ {
 			il.AddError(lid, io.EOF)
-			if j == failureLimit - 1{
+			if j == failureLimit-1 {
 				require.True(t, il.IsFlagged(lid))
 			} else {
 				require.False(t, il.IsFlagged(lid))

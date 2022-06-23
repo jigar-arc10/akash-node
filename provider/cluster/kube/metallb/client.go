@@ -32,9 +32,9 @@ import (
 )
 
 const (
-	akashServiceTarget   = "akash.network/service-target"
-	akashMetalLB         = "metal-lb"
-	metalLbAllowSharedIP = "metallb.universe.tf/allow-shared-ip"
+	akashServiceTarget    = "akash.network/service-target"
+	akashMetalLB          = "metal-lb"
+	metalLbAllowSharedIP  = "metallb.universe.tf/allow-shared-ip"
 	metalLbPoolAnnotation = "metallb.universe.tf/address-pool"
 
 	metricsPath = "/metrics"
@@ -46,7 +46,7 @@ const (
 )
 
 var (
-	errMetalLB = errors.New("metal lb error")
+	errMetalLB             = errors.New("metal lb error")
 	errInvalidLeaseService = fmt.Errorf("%w lease service error", errMetalLB)
 )
 
@@ -99,8 +99,8 @@ func NewClient(configPath string, logger log.Logger, poolName string, endpoint *
 	}
 
 	return &client{
-		sda:  sda,
-		kube: kc,
+		sda:      sda,
+		kube:     kc,
 		poolName: poolName,
 
 		log: logger.With("client", "metallb"),

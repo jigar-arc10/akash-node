@@ -211,7 +211,6 @@ type ManifestService struct {
 	Params *ManifestServiceParams `json:"params,omitempty"`
 }
 
-
 func (ms ManifestService) toAkash() (manifest.Service, error) {
 	res, err := ms.Resources.toAkash()
 	if err != nil {

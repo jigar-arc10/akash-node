@@ -13,15 +13,14 @@ import (
 
 type endpointMigrateRequestBody struct {
 	EndpointsToMigrate []string `json:"endpoints_to_migrate"`
-	DestinationDSeq uint64 `json:"destination_dseq"`
-	DestinationGSeq uint32 `json:"destination_gseq"`
+	DestinationDSeq    uint64   `json:"destination_dseq"`
+	DestinationGSeq    uint32   `json:"destination_gseq"`
 }
 
-
 type serviceExposeWithName struct {
-	expose v2beta1.ManifestServiceExpose
+	expose      v2beta1.ManifestServiceExpose
 	serviceName string
-	proto manifest.ServiceProtocol
+	proto       manifest.ServiceProtocol
 }
 
 func migrateEndpointHandler(log log.Logger, clusterService cluster.Service, client cluster.Client) http.HandlerFunc {
@@ -73,7 +72,7 @@ func migrateEndpointHandler(log log.Logger, clusterService cluster.Service, clie
 		var servicesToMigrate []serviceExposeWithName
 		for _, service := range mgroup.Services {
 			for _, expose := range service.Expose {
-				if ! expose.Global  || len(expose.IP) == 0 {
+				if !expose.Global || len(expose.IP) == 0 {
 					continue
 				}
 				endpointsInDestination[expose.IP] = struct{}{}
@@ -85,7 +84,6 @@ func migrateEndpointHandler(log log.Logger, clusterService cluster.Service, clie
 				entry := serviceExposeWithName{
 					expose:      expose,
 					serviceName: service.Name,
-
 				}
 				// Pre-parse this before any changes are made
 				entry.proto, err = manifest.ParseServiceProtocol(expose.Proto)

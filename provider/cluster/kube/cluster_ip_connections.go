@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	serviceNameLabel = "service-name"
+	serviceNameLabel  = "service-name"
 	externalPortLabel = "external-port"
-	protoLabel = "proto"
+	protoLabel        = "proto"
 )
 
 func (c *client) GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]akashtypes.ProviderLeasedIPSpec, error) {
@@ -30,7 +30,7 @@ func (c *client) GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]
 	kubeSelectorForLease(labelSelector, leaseID)
 
 	results, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).List(ctx, metav1.ListOptions{
-		LabelSelector:        labelSelector.String(),
+		LabelSelector: labelSelector.String(),
 	})
 
 	if err != nil {
@@ -48,9 +48,9 @@ func (c *client) GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]
 func (c *client) PurgeDeclaredIP(ctx context.Context, leaseID mtypes.LeaseID, serviceName string, externalPort uint32, proto manifest.ServiceProtocol) error {
 	labelSelector := &strings.Builder{}
 	kubeSelectorForLease(labelSelector, leaseID)
-	_, _ = fmt.Fprintf(labelSelector,",%s=%s", serviceNameLabel, serviceName)
-	_, _ = fmt.Fprintf(labelSelector,",%s=%s", protoLabel, proto.ToString())
-	_, _ = fmt.Fprintf(labelSelector,",%s=%d", externalPortLabel, externalPort)
+	_, _ = fmt.Fprintf(labelSelector, ",%s=%s", serviceNameLabel, serviceName)
+	_, _ = fmt.Fprintf(labelSelector, ",%s=%s", protoLabel, proto.ToString())
+	_, _ = fmt.Fprintf(labelSelector, ",%s=%d", externalPortLabel, externalPort)
 	return c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName),
 	})
@@ -65,7 +65,7 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 	foundEntry, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Get(ctx, resourceName, metav1.GetOptions{})
 	exists := true
 	if err != nil {
-		if !kubeErrors.IsNotFound(err){
+		if !kubeErrors.IsNotFound(err) {
 			return err
 		}
 		exists = false
@@ -77,9 +77,9 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 
 	labels := map[string]string{
 		builder.AkashManagedLabelName: "true",
-		serviceNameLabel: serviceName,
-		externalPortLabel: fmt.Sprintf("%d", externalPort),
-		protoLabel: proto.ToString(),
+		serviceNameLabel:              serviceName,
+		externalPortLabel:             fmt.Sprintf("%d", externalPort),
+		protoLabel:                    proto.ToString(),
 	}
 	builder.AppendLeaseLabels(lID, labels)
 

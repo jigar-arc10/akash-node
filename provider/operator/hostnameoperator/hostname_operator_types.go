@@ -14,4 +14,3 @@ type managedHostname struct {
 	presentExternalPort uint32
 	lastChangeAt        time.Time
 }
-

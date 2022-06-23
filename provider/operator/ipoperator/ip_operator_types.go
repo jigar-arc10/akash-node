@@ -11,7 +11,7 @@ import (
 
 /*
 	Types that are used only within the IP Address operator locally
- */
+*/
 
 type managedIP struct {
 	presentLease        mtypes.LeaseID
@@ -21,9 +21,8 @@ type managedIP struct {
 	presentExternalPort uint32
 	presentPort         uint32
 	lastChangedAt       time.Time
-	presentProtocol v2beta1.ServiceProtocol
+	presentProtocol     v2beta1.ServiceProtocol
 }
-
 
 type barrier struct {
 	enabled int32

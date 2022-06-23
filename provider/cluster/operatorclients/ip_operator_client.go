@@ -65,7 +65,7 @@ func NewIPOperatorClient(logger log.Logger, kubeConfig *rest.Config, endpoint *n
 	return &ipOperatorClient{
 		sda: sda,
 		log: logger.With("operator", "ip"),
-		l: &sync.Mutex{},
+		l:   &sync.Mutex{},
 	}, nil
 }
 
@@ -86,7 +86,7 @@ type ipOperatorClient struct {
 	sda    clusterutil.ServiceDiscoveryAgent
 	client clusterutil.ServiceClient
 	log    log.Logger
-	l sync.Locker
+	l      sync.Locker
 }
 
 var errNotAlive = errors.New("ip operator is not yet alive")

@@ -106,7 +106,6 @@ type E2EApp struct {
 	IntegrationTestSuite
 }
 
-
 func cliGlobalFlags(args ...string) []string {
 	return append(args,
 		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
@@ -398,7 +397,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	if s.ipMarketplace {
 		s.group.Go(func() error {
 			s.T().Logf("starting ip operator for test on %v", ipOperatorHost)
-			_, err := ptestutil.RunLocalIPOerator(s.ctx, cctx, ipOperatorHost, provURL.Host)
+			_, err := ptestutil.RunLocalIPOerator(s.ctx, cctx, ipOperatorHost, s.keyProvider.GetAddress())
 			s.Assert().NoError(err)
 			return err
 		})
@@ -1489,13 +1488,13 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 	s.Require().NoError(err)
 
 	// Wait for lease to show up
-	maxWait := time.After(2*time.Minute)
+	maxWait := time.After(2 * time.Minute)
 	for {
 
 		select {
-		case <- s.ctx.Done():
+		case <-s.ctx.Done():
 			s.T().Fatal("test context closed before lease is stood up by provider")
-		case <- maxWait:
+		case <-maxWait:
 			s.T().Fatal("timed out waiting on lease to be stood up by provider")
 		default:
 		}

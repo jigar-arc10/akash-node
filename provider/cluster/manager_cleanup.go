@@ -9,32 +9,32 @@ import (
 
 type purgeIPEntry struct {
 	serviceName string
-	port uint32
-	proto v2beta1.ServiceProtocol
+	port        uint32
+	proto       v2beta1.ServiceProtocol
 }
 
 type deployCleanupHelper struct {
 	client Client
-	log logger.Logger
-	lease mtypes.LeaseID
+	log    logger.Logger
+	lease  mtypes.LeaseID
 
 	hostnamesToPurge []string
-	ipsToPurge []purgeIPEntry
+	ipsToPurge       []purgeIPEntry
 }
 
-func newDeployCleanupHelper(lease mtypes.LeaseID, client Client, log logger.Logger) *deployCleanupHelper{
+func newDeployCleanupHelper(lease mtypes.LeaseID, client Client, log logger.Logger) *deployCleanupHelper {
 	return &deployCleanupHelper{
-		client:           client,
-		log:              log,
-		lease:            lease,
+		client: client,
+		log:    log,
+		lease:  lease,
 	}
 }
 
-func (dch *deployCleanupHelper) addHostname(hostname string){
+func (dch *deployCleanupHelper) addHostname(hostname string) {
 	dch.hostnamesToPurge = append(dch.hostnamesToPurge, hostname)
 }
 
-func (dch *deployCleanupHelper) addIP(serviceName string, port uint32, proto v2beta1.ServiceProtocol){
+func (dch *deployCleanupHelper) addIP(serviceName string, port uint32, proto v2beta1.ServiceProtocol) {
 	dch.ipsToPurge = append(
 		dch.ipsToPurge,
 		purgeIPEntry{

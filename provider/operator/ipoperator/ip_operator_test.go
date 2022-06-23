@@ -36,7 +36,6 @@ func runIPOperator(t *testing.T, run bool, prerun, fn func(ctx context.Context, 
 	mllbc := &mocks.MetalLBClient{}
 	mllbc.On("Stop")
 
-
 	ilc := operatorcommon.IgnoreListConfig{
 		FailureLimit: 100,
 		EntryLimit:   9999,
@@ -75,7 +74,8 @@ func runIPOperator(t *testing.T, run bool, prerun, fn func(ctx context.Context, 
 
 		select {
 		case err = <-done:
-			require.Error(t, context.Canceled)
+			require.Error(t, err)
+			require.ErrorIs(t, err, context.Canceled)
 		case <-time.After(10 * time.Second):
 			t.Fatal("timed out waiting for ip operator to stop")
 		}
@@ -272,7 +272,8 @@ func TestIPOperatorRun(t *testing.T) {
 			default:
 			}
 		}()
-		var eventsRead <- chan v1beta2.IPResourceEvent
+		// nolint: golint, gosimple
+		var eventsRead <-chan v1beta2.IPResourceEvent
 		eventsRead = events
 		s.clusterMock.On("ObserveIPState", mock.Anything).Return(eventsRead, nil)
 

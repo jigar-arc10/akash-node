@@ -168,7 +168,6 @@ func TestV2Parse_MultipleGroupsIP(t *testing.T) {
 
 }
 
-
 func TestV2Parse_IPEndpointNaming(t *testing.T) {
 	makeSDLWithEndpointName := func(name string) []byte {
 		const originalSDL = `---

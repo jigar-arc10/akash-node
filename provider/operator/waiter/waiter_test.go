@@ -11,7 +11,7 @@ import (
 
 func TestWaiterNoInput(t *testing.T) {
 	logger := testutil.Logger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// no objects passed
 	waiter := NewOperatorWaiter(ctx, logger)
@@ -44,10 +44,10 @@ func (fw fakeWaiter) String() string {
 func TestWaiterInputReady(t *testing.T) {
 	waitable := fakeWaiter{failure: nil}
 	logger := testutil.Logger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	waiter := NewOperatorWaiter(ctx, logger,  waitable)
+	waiter := NewOperatorWaiter(ctx, logger, waitable)
 	require.NotNil(t, waiter)
 	require.NoError(t, waiter.WaitForAll(ctx))
 }
@@ -55,10 +55,10 @@ func TestWaiterInputReady(t *testing.T) {
 func TestWaiterInputFailed(t *testing.T) {
 	waitable := fakeWaiter{failure: io.EOF}
 	logger := testutil.Logger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	waiter := NewOperatorWaiter(ctx, logger,  waitable)
+	waiter := NewOperatorWaiter(ctx, logger, waitable)
 	require.NotNil(t, waiter)
 	require.ErrorIs(t, waiter.WaitForAll(ctx), context.DeadlineExceeded)
 }

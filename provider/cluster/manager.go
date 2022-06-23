@@ -81,21 +81,21 @@ func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *manifest.Gro
 	logger := s.log.With("cmp", "deployment-manager", "lease", lease, "manifest-group", mgroup.Name)
 
 	dm := &deploymentManager{
-		bus:              s.bus,
-		client:           s.client,
-		session:          s.session,
-		state:            dsDeployActive,
-		lease:            lease,
-		mgroup:           mgroup,
-		wg:               sync.WaitGroup{},
-		updatech:         make(chan *manifest.Group),
-		teardownch:       make(chan struct{}),
-		log:              logger,
-		lc:               lifecycle.New(),
-		hostnameService:  s.HostnameService(),
-		config:           s.config,
+		bus:                 s.bus,
+		client:              s.client,
+		session:             s.session,
+		state:               dsDeployActive,
+		lease:               lease,
+		mgroup:              mgroup,
+		wg:                  sync.WaitGroup{},
+		updatech:            make(chan *manifest.Group),
+		teardownch:          make(chan struct{}),
+		log:                 logger,
+		lc:                  lifecycle.New(),
+		hostnameService:     s.HostnameService(),
+		config:              s.config,
 		serviceShuttingDown: s.lc.ShuttingDown(),
-		currentHostnames: make(map[string]struct{}),
+		currentHostnames:    make(map[string]struct{}),
 	}
 
 	ctx, _ := TieContextToLifecycle(context.Background(), s.lc)
@@ -334,10 +334,6 @@ type serviceExposeWithServiceName struct {
 	name   string
 }
 
-func (sewsn serviceExposeWithServiceName) idIP() string {
-	return fmt.Sprintf("%s-%s-%d-%v", sewsn.name, sewsn.expose.IP, sewsn.expose.Port, sewsn.expose.Proto)
-}
-
 func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, error) {
 	cleanupHelper := newDeployCleanupHelper(dm.lease, dm.client, dm.log)
 	var err error
@@ -476,7 +472,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		port := serviceExpose.expose.Port
 
 		err = dm.client.DeclareIP(ctx, dm.lease, serviceExpose.name, uint32(port), uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
-		if err != nil  {
+		if err != nil {
 			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
 				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
 				return withheldHostnames, nil, err
